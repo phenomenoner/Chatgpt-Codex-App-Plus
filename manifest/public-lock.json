@@ -163,10 +163,10 @@
       "sha256": "36f5a1dfaada7b4ab72b554bb8a06094cbc30a743eb7e6133915f49920e46f2d"
     },
     {
-      "bytes": 5079,
+      "bytes": 5329,
       "componentId": "long-run-supervisor",
       "path": "skills/long-run-supervisor/tests/smoke.ps1",
-      "sha256": "138a25a91a754468172611d871f925c52f00ed0535f0697fd7f585678184cfc2"
+      "sha256": "bf8495108ba2c5e5bfa292c1eebd2d3473a8db5757b49be830be52161c20f2a5"
     },
     {
       "bytes": 7244,

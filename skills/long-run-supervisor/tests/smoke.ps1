@@ -108,3 +108,8 @@ finally {
         Remove-Item -LiteralPath $resolvedTest -Recurse -Force
     }
 }
+
+# The failure probe intentionally leaves a non-zero native exit code behind.
+# The smoke contract itself succeeded, so do not leak that child status to a
+# caller such as a composed PowerShell script or GitHub Actions step.
+$global:LASTEXITCODE = 0
