@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["proposal", "blocked"]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "applyPatch": {
+      "type": "string"
+    },
+    "targetPaths": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": ["status", "summary", "applyPatch", "targetPaths", "checks", "gaps"]
+}

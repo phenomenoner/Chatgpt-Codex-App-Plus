@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "batch-review-synthesis.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reviewWaveId",
+    "topology",
+    "laneReports",
+    "auditReports",
+    "matrixClosure",
+    "findingClusters",
+    "unresolvedChallengeIds",
+    "actualCandidateVerdict",
+    "findingSetStatus",
+    "counterfactualVerdict",
+    "thirdReviewerRequired",
+    "rationale"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "batch-review-synthesis.v1"},
+    "reviewWaveId": {"$ref": "#/$defs/sha256"},
+    "topology": {
+      "enum": [
+        "SINGLE_FIXED_POINT",
+        "SINGLE_PLUS_NARROW_AUDITOR",
+        "TWO_BLIND_RECIPROCAL"
+      ]
+    },
+    "laneReports": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "auditReports": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/artifact"}
+    },
+    "matrixClosure": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/matrixClosure"}
+    },
+    "findingClusters": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/findingCluster"}
+    },
+    "unresolvedChallengeIds": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
+    },
+    "actualCandidateVerdict": {"enum": ["PASS", "BLOCKED", "INCOMPLETE"]},
+    "findingSetStatus": {"enum": ["AUDITED_BATCH_COMPLETE", "INCOMPLETE"]},
+    "counterfactualVerdict": {
+      "enum": ["NOT_NEEDED", "PASS_UNDER_ASSUMPTIONS", "UNRESOLVED"]
+    },
+    "thirdReviewerRequired": {"type": "boolean"},
+    "rationale": {"type": "string", "minLength": 1}
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "path", "length", "sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "path": {"type": "string", "minLength": 1},
+        "length": {"type": "integer", "minimum": 0},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "matrixClosure": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cellId", "status", "supportingReportIds", "challengeIds"],
+      "properties": {
+        "cellId": {"type": "string", "minLength": 1},
+        "status": {"enum": ["SUPPORTED", "NOT_APPLICABLE", "OPEN"]},
+        "supportingReportIds": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "challengeIds": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "findingCluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "findingIds",
+        "relationship",
+        "disposition",
+        "dispositionEvidence",
+        "blocking",
+        "repairProperties",
+        "regressionCellIds"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "findingIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "relationship": {
+          "enum": [
+            "FULL_DUPLICATE_PRIMITIVE",
+            "PARTIAL_OVERLAP_RETAIN_DISTINCT_AXES",
+            "RELATED_FAMILY_NOT_DUPLICATE",
+            "UNIQUE"
+          ]
+        },
+        "disposition": {"enum": ["ACCEPTED", "REJECTED_WITH_EVIDENCE"]},
+        "dispositionEvidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "blocking": {"type": "boolean"},
+        "repairProperties": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "regressionCellIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "locator", "claim", "tier"],
+      "properties": {
+        "kind": {
+          "enum": ["SOURCE", "CONTRACT", "TEST", "RECEIPT", "MANIFEST"]
+        },
+        "path": {"type": "string", "minLength": 1},
+        "locator": {"type": "string", "minLength": 1},
+        "claim": {"type": "string", "minLength": 1},
+        "tier": {"enum": ["T0", "T1", "T2", "T3", "T4"]},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    }
+  }
+}

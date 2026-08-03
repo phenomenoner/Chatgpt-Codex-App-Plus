@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "batch-independent-review-report.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "binding",
+    "reviewer",
+    "actualCandidateVerdict",
+    "findingSetStatus",
+    "counterfactualVerdict",
+    "continuedAfterFirstBlocker",
+    "coverage",
+    "findings",
+    "assumptions",
+    "verificationGaps",
+    "fixedPoint",
+    "stopping"
+  ],
+  "properties": {
+    "schemaVersion": {"const": "batch-independent-review-report.v1"},
+    "binding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewWaveId",
+        "candidateManifestSha256",
+        "evidenceIndexSha256",
+        "reviewPlanSha256",
+        "coverageMatrixSha256"
+      ],
+      "properties": {
+        "reviewWaveId": {"$ref": "#/$defs/sha256"},
+        "candidateManifestSha256": {"$ref": "#/$defs/sha256"},
+        "evidenceIndexSha256": {"$ref": "#/$defs/sha256"},
+        "reviewPlanSha256": {"$ref": "#/$defs/sha256"},
+        "coverageMatrixSha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "reviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "independentPass"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "role": {
+          "enum": ["PRIMARY_FIXED_POINT", "COVERAGE_AUDITOR", "FULL_ESCALATION"]
+        },
+        "model": {"type": "string"},
+        "effort": {"type": "string"},
+        "independentPass": {"type": "boolean"}
+      }
+    },
+    "actualCandidateVerdict": {"enum": ["PASS", "BLOCKED", "INCOMPLETE"]},
+    "findingSetStatus": {
+      "enum": [
+        "BATCH_COMPLETE",
+        "BUDGET_EXHAUSTED",
+        "HASH_DRIFT",
+        "ACCESS_BLOCKED",
+        "SCOPE_ABORTED",
+        "OVERFLOW_NEEDS_ENUMERATION"
+      ]
+    },
+    "counterfactualVerdict": {
+      "enum": ["NOT_NEEDED", "PASS_UNDER_ASSUMPTIONS", "UNRESOLVED"]
+    },
+    "continuedAfterFirstBlocker": {"type": "boolean"},
+    "coverage": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/coverage"}
+    },
+    "findings": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/finding"}
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/assumption"}
+    },
+    "verificationGaps": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/gap"}
+    },
+    "fixedPoint": {"$ref": "#/$defs/fixedPoint"},
+    "stopping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reason", "unvisitedRequiredCellIds"],
+      "properties": {
+        "reason": {
+          "enum": [
+            "COVERAGE_COMPLETE",
+            "HASH_DRIFT",
+            "ACCESS_FAILURE",
+            "SCOPE_VIOLATION",
+            "BUDGET_REACHED",
+            "SAFETY_NOTIFICATION",
+            "FINDING_OVERFLOW"
+          ]
+        },
+        "unvisitedRequiredCellIds": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "note": {"type": "string"}
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "path", "locator", "claim", "tier"],
+      "properties": {
+        "kind": {"enum": ["SOURCE", "CONTRACT", "TEST", "RECEIPT", "MANIFEST"]},
+        "path": {"type": "string"},
+        "locator": {"type": "string"},
+        "claim": {"type": "string"},
+        "tier": {"enum": ["T0", "T1", "T2", "T3", "T4"]},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cellId",
+        "status",
+        "closureSupport",
+        "highestEvidenceTier",
+        "evidence",
+        "findingIds"
+      ],
+      "properties": {
+        "cellId": {"type": "string"},
+        "status": {
+          "enum": [
+            "COVERED_NO_FINDING",
+            "FINDING",
+            "NOT_APPLICABLE",
+            "EVIDENCE_GAP",
+            "UNVISITED"
+          ]
+        },
+        "closureSupport": {
+          "enum": [
+            "SUPPORTED",
+            "WRONG_TIER",
+            "UNSUPPORTED",
+            "NOT_APPLICABLE",
+            "OPEN"
+          ]
+        },
+        "highestEvidenceTier": {
+          "enum": ["NONE", "T0", "T1", "T2", "T3", "T4"]
+        },
+        "notApplicableReason": {"type": "string"},
+        "evidence": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "findingIds": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "severity",
+        "blocksGate",
+        "contractIds",
+        "preconditions",
+        "executionPath",
+        "firstUnsafeOperation",
+        "impact",
+        "evidence",
+        "siblingCellDisposition",
+        "requiredRepairProperties",
+        "requiredRegressionCellIds"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "severity": {"enum": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
+        "blocksGate": {"type": "boolean"},
+        "contractIds": {"type": "array", "items": {"type": "string"}},
+        "preconditions": {"type": "array", "items": {"type": "string"}},
+        "executionPath": {"type": "array", "items": {"type": "string"}},
+        "firstUnsafeOperation": {"type": "string"},
+        "impact": {"type": "string"},
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidence"}
+        },
+        "siblingCellDisposition": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["cellId", "status", "reason"],
+            "properties": {
+              "cellId": {"type": "string"},
+              "status": {"enum": ["AFFECTED", "SAFE_WITH_EVIDENCE", "NOT_APPLICABLE", "UNVISITED"]},
+              "reason": {"type": "string"}
+            }
+          }
+        },
+        "requiredRepairProperties": {"type": "array", "items": {"type": "string"}},
+        "requiredRegressionCellIds": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "assumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "findingIds",
+        "repairPostcondition",
+        "affectedCellIds",
+        "reopenedCellIds",
+        "requiredRegressionCellIds",
+        "falsificationCondition"
+      ],
+      "properties": {
+        "id": {"type": "string"},
+        "findingIds": {"type": "array", "items": {"type": "string"}},
+        "repairPostcondition": {"type": "string", "minLength": 1},
+        "affectedCellIds": {"type": "array", "items": {"type": "string"}},
+        "reopenedCellIds": {"type": "array", "items": {"type": "string"}},
+        "requiredRegressionCellIds": {"type": "array", "items": {"type": "string"}},
+        "conflictsWith": {"type": "array", "items": {"type": "string"}},
+        "falsificationCondition": {"type": "string", "minLength": 1}
+      }
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "cellIds", "blocksGate", "reason", "requiredAction"],
+      "properties": {
+        "id": {"type": "string"},
+        "cellIds": {"type": "array", "items": {"type": "string"}},
+        "blocksGate": {"type": "boolean"},
+        "reason": {"type": "string"},
+        "requiredAction": {"type": "string"}
+      }
+    },
+    "fixedPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "iterationCount",
+        "stable",
+        "reopenObligations",
+        "adversarialChecks",
+        "unresolvedChallengeIds"
+      ],
+      "properties": {
+        "iterationCount": {"type": "integer", "minimum": 1},
+        "stable": {"type": "boolean"},
+        "reopenObligations": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/reopenObligation"}
+        },
+        "adversarialChecks": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/adversarialCheck"}
+        },
+        "unresolvedChallengeIds": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "reopenObligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "triggerKind",
+        "triggerId",
+        "cellIds",
+        "disposition",
+        "evidence"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "triggerKind": {
+          "enum": ["FINDING", "ASSUMPTION", "COVERAGE_CHALLENGE"]
+        },
+        "triggerId": {"type": "string", "minLength": 1},
+        "cellIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"},
+          "uniqueItems": true
+        },
+        "disposition": {"enum": ["REVIEWED", "OPEN"]},
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidence"}
+        }
+      }
+    },
+    "adversarialCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimension",
+        "applicable",
+        "completed",
+        "note",
+        "evidence"
+      ],
+      "properties": {
+        "dimension": {
+          "enum": [
+            "SIBLING_CALL_SITES",
+            "LIFECYCLE_PHASES",
+            "CURRENT_LIVE_THIRD_STATE",
+            "EVIDENCE_ALTITUDE",
+            "REPAIR_POSTCONDITION_COMPLETENESS"
+          ]
+        },
+        "applicable": {"type": "boolean"},
+        "completed": {"type": "boolean"},
+        "note": {"type": "string", "minLength": 1},
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/evidence"}
+        }
+      }
+    }
+  }
+}

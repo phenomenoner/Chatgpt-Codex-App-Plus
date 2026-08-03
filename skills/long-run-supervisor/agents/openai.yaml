@@ -1,0 +1,4 @@
+interface:
+  display_name: "Long-Run Supervisor"
+  short_description: "Supervise long PowerShell jobs without model polling"
+  default_prompt: "Use $long-run-supervisor with exactly one blocking Wait, no short Poll or Wait loop and no healthy-progress chatter; wake me only on a terminal or abnormal condition."

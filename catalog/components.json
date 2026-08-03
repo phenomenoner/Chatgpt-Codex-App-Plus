@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "codex-plus-component-catalog.v1",
+  "components": [
+    {
+      "id": "batch-complete-independent-review",
+      "distribution": "vendored",
+      "defaultInstall": true,
+      "maturity": "beta",
+      "requires": ["Python 3.11+ for deterministic validation"],
+      "summary": "Review a frozen candidate beyond the first blocker, separate actual and counterfactual verdicts, and bind the gate to hashes."
+    },
+    {
+      "id": "long-run-supervisor",
+      "distribution": "vendored",
+      "defaultInstall": true,
+      "maturity": "beta",
+      "requires": ["PowerShell 7+ recommended"],
+      "summary": "Move heartbeat, stall detection, and terminal wakeups outside high-context reasoning turns."
+    },
+    {
+      "id": "codex-cli-luna-worker",
+      "distribution": "vendored",
+      "defaultInstall": true,
+      "maturity": "experimental",
+      "requires": ["Codex CLI", "PowerShell"],
+      "summary": "Ask a bounded, read-only Luna CLI worker for an apply_patch proposal when native collaboration does not expose Luna."
+    },
+    {
+      "id": "completeness-and-test-synthesis",
+      "distribution": "vendored",
+      "defaultInstall": true,
+      "maturity": "beta",
+      "requires": [],
+      "summary": "Map blast radius and invariants so green tests do not become a false completion claim."
+    },
+    {
+      "id": "incident-to-regression",
+      "distribution": "vendored",
+      "defaultInstall": true,
+      "maturity": "beta",
+      "requires": ["Python 3.11+ for record validation"],
+      "summary": "Turn engineering incidents into redacted fail-first replay fixtures and rollout gates."
+    },
+    {
+      "id": "claude-independent-review",
+      "distribution": "vendored",
+      "defaultInstall": false,
+      "maturity": "experimental",
+      "requires": ["Claude Code CLI", "Explicit user authorization per invocation"],
+      "summary": "Run a local Claude CLI as an independent, read-only, hash-bound review adapter."
+    },
+    {
+      "id": "operate-a2a-superhub",
+      "distribution": "vendored",
+      "defaultInstall": false,
+      "maturity": "beta",
+      "requires": [
+        "A compatible A2A Superhub deployment and its a2a_superhub Python package for bundled helpers"
+      ],
+      "summary": "Negotiate capabilities and operate an A2A Superhub through bounded CLI, HTTP, MCP, and A2A surfaces."
+    },
+    {
+      "id": "baton-fanout-skill",
+      "distribution": "pointer",
+      "defaultInstall": true,
+      "maturity": "stable",
+      "requires": [],
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
+      "summary": "Choose the smallest reliable subagent topology and enforce exclusive write ownership."
+    },
+    {
+      "id": "understand-anything",
+      "distribution": "pointer",
+      "defaultInstall": false,
+      "maturity": "upstream",
+      "requires": [],
+      "canonicalUrl": "https://github.com/Egonex-AI/Understand-Anything",
+      "summary": "Build and query an interactive knowledge graph for a codebase."
+    },
+    {
+      "id": "openai-skills",
+      "distribution": "pointer",
+      "defaultInstall": false,
+      "maturity": "upstream",
+      "requires": [],
+      "canonicalUrl": "https://github.com/openai/skills",
+      "summary": "Canonical OpenAI skill examples and curated distributions; use upstream rather than copying them here."
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+# Public-safe starting point. Review every setting before copying it into your
+# personal or project Codex configuration.
+
+model_reasoning_effort = "high"
+personality = "pragmatic"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+web_search = "cached"
+
+[features]
+multi_agent = true
+# Memories remain experimental. Enable only after reviewing their data boundary.
+memories = false
+
+[windows]
+sandbox = "elevated"
+
+# Add MCP servers only from sources you trust. Never commit credentials.
+# [mcp_servers.openaiDeveloperDocs]
+# url = "https://developers.openai.com/mcp"

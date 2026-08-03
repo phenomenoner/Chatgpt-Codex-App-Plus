@@ -1,0 +1,7 @@
+interface:
+  display_name: "Batch-Complete Independent Review"
+  short_description: "Find complete blocker batches before refreezing"
+  default_prompt: "Use $batch-complete-independent-review to audit this frozen candidate through counterfactual closure."
+
+policy:
+  allow_implicit_invocation: true

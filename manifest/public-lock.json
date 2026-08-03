@@ -1,0 +1,262 @@
+{
+  "files": [
+    {
+      "bytes": 11779,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/SKILL.md",
+      "sha256": "9bc5a2593aafc74dee19d2371170927606ea717f47c03232f516a071c8c4fe13"
+    },
+    {
+      "bytes": 299,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/agents/openai.yaml",
+      "sha256": "765d6c0f8355af6323e363d670ba14b6098815fc16d5b9883560449bc5b8aac2"
+    },
+    {
+      "bytes": 1139,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/references/coverage-matrix.schema.json",
+      "sha256": "f0d545d636ad8a5c2b3df7107aa570e3c9e03933bb31213d8b639066a3905b34"
+    },
+    {
+      "bytes": 7357,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/references/cross-audit.schema.json",
+      "sha256": "9e95e87e65e62ad0b092dfa78927e047a04d094ffa9e804093ee2db79ab7536f"
+    },
+    {
+      "bytes": 10781,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/references/protocol.md",
+      "sha256": "8e56bd59f403da691763a5ec449a0b61041bde1c27bce7f5b1ca98c3efbdcd54"
+    },
+    {
+      "bytes": 10027,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/references/review-report.schema.json",
+      "sha256": "97f2a0e001be4c435bfc1e545fa1a70e86d789fc71e2df0488eefd98bf1fc96c"
+    },
+    {
+      "bytes": 1099,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/references/review-wave.schema.json",
+      "sha256": "b72860377cd3d855352db8022718d12b0897f04984fa2d6968e1bcd076c1fa6c"
+    },
+    {
+      "bytes": 4593,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/references/synthesis.schema.json",
+      "sha256": "6bded6d32d5c080687ec5696886e1d25bbd166923e73f2f436abeb9becb64c4b"
+    },
+    {
+      "bytes": 91776,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/scripts/review_gate.py",
+      "sha256": "aa131554f8177e8e08b12305fd394066c2e2537c5e4a0fef9e96022af82d72a5"
+    },
+    {
+      "bytes": 30631,
+      "componentId": "batch-complete-independent-review",
+      "path": "skills/batch-complete-independent-review/tests/test_review_gate.py",
+      "sha256": "cd94a0a65a31350df934f0de20c8fbc06fe8839930d84060be44053cafcd6ebd"
+    },
+    {
+      "bytes": 4010,
+      "componentId": "claude-independent-review",
+      "path": "skills/claude-independent-review/SKILL.md",
+      "sha256": "898fd7a4655bfe4a9c8c2baf7d06d0912daf00b3f85d34e28e8a7d129c119de8"
+    },
+    {
+      "bytes": 241,
+      "componentId": "claude-independent-review",
+      "path": "skills/claude-independent-review/agents/openai.yaml",
+      "sha256": "9f0eef02d9b6765f45acfaa8525f437b5ae77cf59cd18b9654b16a01da9e7979"
+    },
+    {
+      "bytes": 6820,
+      "componentId": "codex-cli-luna-worker",
+      "path": "skills/codex-cli-luna-worker/SKILL.md",
+      "sha256": "a6b4fcde72e578401d3334f426b683bc47b303c678960fb13dd1ae9038a7fe65"
+    },
+    {
+      "bytes": 254,
+      "componentId": "codex-cli-luna-worker",
+      "path": "skills/codex-cli-luna-worker/agents/openai.yaml",
+      "sha256": "65fcaf7c04a7c2a70cb921a8860acae27a48d2463c5b246f172b77658416612c"
+    },
+    {
+      "bytes": 16066,
+      "componentId": "codex-cli-luna-worker",
+      "path": "skills/codex-cli-luna-worker/scripts/invoke_luna_worker.ps1",
+      "sha256": "a274014953d4d32b16cf752f5760a529d0cfa9e8137a531faf26312b631dbb78"
+    },
+    {
+      "bytes": 696,
+      "componentId": "codex-cli-luna-worker",
+      "path": "skills/codex-cli-luna-worker/scripts/worker-output.schema.json",
+      "sha256": "ba975787db36f194f5dd3212112b8f86dac8f11bc8427bd6edd973043541d295"
+    },
+    {
+      "bytes": 4647,
+      "componentId": "completeness-and-test-synthesis",
+      "path": "skills/completeness-and-test-synthesis/README.md",
+      "sha256": "8b8c36cf79dbca0215ce2d49a69f759232f7c2b7041f2222e71f68b3e4f2149e"
+    },
+    {
+      "bytes": 13502,
+      "componentId": "completeness-and-test-synthesis",
+      "path": "skills/completeness-and-test-synthesis/SKILL.md",
+      "sha256": "bee5a9dd3de1021ab2fe051c6d6c8d206dcdb7c96104ba67a4b7e9e3ba764838"
+    },
+    {
+      "bytes": 4242,
+      "componentId": "completeness-and-test-synthesis",
+      "path": "skills/completeness-and-test-synthesis/references/receipt-to-replay.md",
+      "sha256": "925cbb7cb33a554ee42cda22d0bc286c819ba3f0f53360ce28fd80737465447b"
+    },
+    {
+      "bytes": 6358,
+      "componentId": "incident-to-regression",
+      "path": "skills/incident-to-regression/SKILL.md",
+      "sha256": "51d4e744e4ca541467737408f6788e5cb692c64494e32ba184be81160e460039"
+    },
+    {
+      "bytes": 243,
+      "componentId": "incident-to-regression",
+      "path": "skills/incident-to-regression/agents/openai.yaml",
+      "sha256": "cf8480469d7e67dcacfa7bd285cec5fb3a306d3599c5f127215b6e72a735da06"
+    },
+    {
+      "bytes": 22849,
+      "componentId": "incident-to-regression",
+      "path": "skills/incident-to-regression/references/pitfall-patterns.md",
+      "sha256": "e7342eeee620239d5bc6a6a28294dbb64a700a2b552811aae4c1286e05bb06c2"
+    },
+    {
+      "bytes": 18399,
+      "componentId": "incident-to-regression",
+      "path": "skills/incident-to-regression/scripts/validate_incident_record.py",
+      "sha256": "b619a057a523fa4a7eab4667fc810f8f8065d7ad972692615997c66976d7974e"
+    },
+    {
+      "bytes": 6088,
+      "componentId": "long-run-supervisor",
+      "path": "skills/long-run-supervisor/SKILL.md",
+      "sha256": "9780ba3cc59e3b524cfa4f775d968f0229193562907016db28437f69782169b3"
+    },
+    {
+      "bytes": 312,
+      "componentId": "long-run-supervisor",
+      "path": "skills/long-run-supervisor/agents/openai.yaml",
+      "sha256": "2cd4ace92d8cfd39c6698b911ce4ae0dc56969e81d5d8f6c7a18de397a3db4cc"
+    },
+    {
+      "bytes": 34074,
+      "componentId": "long-run-supervisor",
+      "path": "skills/long-run-supervisor/scripts/long-run-supervisor.ps1",
+      "sha256": "dc4f9c3111a4071036a2a3f04d6ef8e6950b3e3d8e642b93dd16d95b271f7511"
+    },
+    {
+      "bytes": 5797,
+      "componentId": "long-run-supervisor",
+      "path": "skills/long-run-supervisor/tests/atomic-write-regression.ps1",
+      "sha256": "36f5a1dfaada7b4ab72b554bb8a06094cbc30a743eb7e6133915f49920e46f2d"
+    },
+    {
+      "bytes": 5079,
+      "componentId": "long-run-supervisor",
+      "path": "skills/long-run-supervisor/tests/smoke.ps1",
+      "sha256": "138a25a91a754468172611d871f925c52f00ed0535f0697fd7f585678184cfc2"
+    },
+    {
+      "bytes": 7244,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/SKILL.md",
+      "sha256": "38ffd3df1cde11397d99070de3e69da06d4a86a6eb67706c628531490c351598"
+    },
+    {
+      "bytes": 225,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/agents/openai.yaml",
+      "sha256": "a109026110e8fc91194e4818f34593454d224b6c8310dd4813ddb176d5ac8b1f"
+    },
+    {
+      "bytes": 5231,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/references/capabilities-and-versions.md",
+      "sha256": "d065dd2be5ddee39f572fb78b6160950e883cddc9a0a5d1629a2dbc636e45b0e"
+    },
+    {
+      "bytes": 1191,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/references/compatibility.json",
+      "sha256": "a40b839daed75c2a1d4418e1e43d14cd819841038b45e69dbb4575635c8ea41e"
+    },
+    {
+      "bytes": 4100,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/references/security-and-approval.md",
+      "sha256": "11eb57c1fa25f04f8347b95349719cda4b4d9e5a3f4132007948204c1320d2a5"
+    },
+    {
+      "bytes": 3703,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/references/troubleshooting.md",
+      "sha256": "774aff667bc609899bb722cd45c872b14ff4b4a59a18e986c8eb7c6f912a4ea4"
+    },
+    {
+      "bytes": 14066,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/references/workflows.md",
+      "sha256": "615dc0efce5b680dbba3e991aa22c41838021f6628a63b3a8165f1c272d2d131"
+    },
+    {
+      "bytes": 6645,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/scripts/bootstrap_local.py",
+      "sha256": "7d006844e01146ee2d71aad42cfc75499d785e41029a6f1f375db9feb52b629e"
+    },
+    {
+      "bytes": 4571,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/scripts/doctor.py",
+      "sha256": "c6983a0ff9ea0c5e9ba541fefac7c10db718b49328df31be72c5d1e2e7788dc1"
+    },
+    {
+      "bytes": 5499,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/scripts/launch_mcp.py",
+      "sha256": "8a8002026ed2d69b8a08fe1a0795dccbf5ed8fe1351835acfaf61508db5a1187"
+    },
+    {
+      "bytes": 4984,
+      "componentId": "operate-a2a-superhub",
+      "path": "skills/operate-a2a-superhub/scripts/smoke.py",
+      "sha256": "f0a6f9ab00afad2cef890090e5b2cfe326930a8b974f39b3faf9d0d6f45eaf69"
+    }
+  ],
+  "pointers": [
+    {
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
+      "commit": "c1a05b2ac12ce00df0e5feb90fb42191f935c9c7",
+      "id": "baton-fanout-skill",
+      "license": "MIT",
+      "version": "v1.0.0"
+    },
+    {
+      "canonicalUrl": "https://github.com/openai/skills",
+      "commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "id": "openai-skills",
+      "license": "See upstream",
+      "version": "upstream-main-snapshot-2026-06-24"
+    },
+    {
+      "canonicalUrl": "https://github.com/Egonex-AI/Understand-Anything",
+      "commit": "54754a6f97051d1d76c8758353d8ea41afe502a6",
+      "id": "understand-anything",
+      "license": "See upstream",
+      "version": "v2.7.3-97-g54754a6"
+    }
+  ],
+  "schemaVersion": "codex-plus-public-lock.v1"
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "A2A Superhub Operator"
+  short_description: "Operate and diagnose A2A Superhub safely"
+  default_prompt: "Use $operate-a2a-superhub to inspect this Superhub and choose a compatible safe workflow."

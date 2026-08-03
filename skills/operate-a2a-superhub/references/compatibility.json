@@ -1,0 +1,30 @@
+{
+  "contract": "a2a-superhub.skill-compatibility.v1",
+  "skill": "operate-a2a-superhub",
+  "productMajor": 0,
+  "productBaseline": "0.3.0",
+  "status": "operational-controls",
+  "apiVersions": ["memory.v1", "memory.v2", "artifacts.v1", "operations.v1"],
+  "noteSchemas": ["a2a-superhub.memory.note.v1"],
+  "a2aProtocolVersions": ["legacy", "1.0"],
+  "mcpProtocolVersion": "2025-11-25",
+  "contractFiles": [
+    "schemas/capabilities-v2.schema.json",
+    "schemas/agent-surface-v1.json",
+    "schemas/artifact-api-v1.schema.json",
+    "schemas/mcp-memory-v1.contract.json",
+    "schemas/memory-api-v1.schema.json",
+    "schemas/memory-api-v2.schema.json",
+    "schemas/memory-note-v1.schema.json",
+    "schemas/operations-v1.schema.json",
+    "schemas/package-extras-v1.json",
+    "schemas/principal-v1.schema.json",
+    "schemas/reference-adapter-v1.schema.json",
+    "schemas/retrieval-v1.json",
+    "schemas/skill-install-v1.schema.json",
+    "tests/contracts/fixtures/a2a/agent-card.json",
+    "tests/contracts/fixtures/a2a/send-message.json"
+  ],
+  "agentSurfaceRevision": "sha256:8844ad782cfda85321b04b28e42f1d3e1e5b7bd040ec677b49d81e9291cb1a07",
+  "fallback": "read-only-discovery"
+}

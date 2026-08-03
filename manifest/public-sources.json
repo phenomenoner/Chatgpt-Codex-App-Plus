@@ -1,0 +1,112 @@
+{
+  "schemaVersion": "codex-plus-public-sources.v1",
+  "components": [
+    {
+      "id": "batch-complete-independent-review",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/batch-complete-independent-review",
+      "destination": "skills/batch-complete-independent-review",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+    },
+    {
+      "id": "claude-independent-review",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/claude-independent-review",
+      "destination": "skills/claude-independent-review",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+    },
+    {
+      "id": "codex-cli-luna-worker",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/codex-cli-luna-worker",
+      "destination": "skills/codex-cli-luna-worker",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"],
+      "publicExceptions": [
+        {
+          "path": "SKILL.md",
+          "finding": "project-specific runtime marker",
+          "reason": "The public skill documents an explicit deny boundary for a protected runtime directory."
+        },
+        {
+          "path": "scripts/invoke_luna_worker.ps1",
+          "finding": "project-specific runtime marker",
+          "reason": "The worker enforces the documented protected-runtime deny boundary in code."
+        }
+      ]
+    },
+    {
+      "id": "completeness-and-test-synthesis",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/completeness-and-test-synthesis",
+      "destination": "skills/completeness-and-test-synthesis",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+    },
+    {
+      "id": "incident-to-regression",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/incident-to-regression",
+      "destination": "skills/incident-to-regression",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+    },
+    {
+      "id": "long-run-supervisor",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/long-run-supervisor",
+      "destination": "skills/long-run-supervisor",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+    },
+    {
+      "id": "operate-a2a-superhub",
+      "mode": "vendor",
+      "sourceRoot": "codex",
+      "source": "skills/operate-a2a-superhub",
+      "destination": "skills/operate-a2a-superhub",
+      "include": [
+        "SKILL.md",
+        "agents/*",
+        "agents/**/*",
+        "references/*",
+        "references/**/*",
+        "scripts/*",
+        "scripts/**/*"
+      ],
+      "exclude": ["**/__pycache__/**", "**/*.pyc", ".a2a-superhub-install.json"]
+    },
+    {
+      "id": "baton-fanout-skill",
+      "mode": "pointer",
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
+      "version": "v1.0.0",
+      "commit": "c1a05b2ac12ce00df0e5feb90fb42191f935c9c7",
+      "license": "MIT"
+    },
+    {
+      "id": "understand-anything",
+      "mode": "pointer",
+      "canonicalUrl": "https://github.com/Egonex-AI/Understand-Anything",
+      "version": "v2.7.3-97-g54754a6",
+      "commit": "54754a6f97051d1d76c8758353d8ea41afe502a6",
+      "license": "See upstream"
+    },
+    {
+      "id": "openai-skills",
+      "mode": "pointer",
+      "canonicalUrl": "https://github.com/openai/skills",
+      "version": "upstream-main-snapshot-2026-06-24",
+      "commit": "49f948faa9258a0c61caceaf225e179651397431",
+      "license": "See upstream"
+    }
+  ]
+}

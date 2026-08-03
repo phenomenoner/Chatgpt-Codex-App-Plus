@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Independent Review"
+  short_description: "Run a hash-bound Claude release review gate"
+  default_prompt: "Use $claude-independent-review to run an independent final review of the frozen release candidate."
