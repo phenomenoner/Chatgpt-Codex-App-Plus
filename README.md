@@ -80,7 +80,7 @@ Codex 的 personal config、project config 與命令列 override 有明確優先
 2. 拒絕個人絕對路徑、token、secret assignment 與 private runtime 訊號。
 3. 將文字正規化為 UTF-8/LF，再生成逐檔 SHA-256 lock。
 4. 對少數非機密但容易誤判的字串，只允許 manifest 內逐檔、逐 finding、附理由的例外。
-5. 任何新檔都必須先人工加入 allow-list；自動化不得自行擴權。
+5. 新來源、新 component 或擴大的 include pattern 必須先由人工修改 allow-list；既有核准 component 內的新檔仍須通過完整 public diff 檢閱，自動化不得自行擴權。
 
 架構與 threat model 見 [docs/architecture.md](docs/architecture.md)，每週同步契約見 [docs/weekly-sync.md](docs/weekly-sync.md)。
 
