@@ -9,7 +9,10 @@ permissions:
 
 jobs:
   validate:
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
