@@ -23,5 +23,14 @@ jobs:
           python-version: "3.11"
       - name: Run sync contract tests
         run: python -m unittest discover -s tests -v
+      - name: Run review gate contract tests
+        working-directory: skills/batch-complete-independent-review
+        run: python -m unittest discover -s tests -v
+      - name: Run supervisor PowerShell regressions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./skills/long-run-supervisor/tests/atomic-write-regression.ps1
+          ./skills/long-run-supervisor/tests/smoke.ps1
       - name: Validate public hygiene and lock
         run: python scripts/public_sync.py validate
