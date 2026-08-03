@@ -55,6 +55,12 @@ Before semantic review, create or identify:
 4. A required coverage matrix spanning entrypoints, lifecycle phases,
    mutations, recovery/cleanup paths, adversarial variants, and evidence tiers.
 
+Make every required matrix row atomic: one contract, entrypoint, operation,
+lifecycle phase, adversarial variant, expected behavior, and required evidence
+tier. Do not use composite rows such as "all recovery phases" or let reviewers
+silently invent required subcells. A newly discovered required subcell is a
+matrix gap: rebind the review wave and keep the active finding set incomplete.
+
 Use `scripts/review_gate.py bind` to hash these four artifacts into one review
 wave. Hashing and schema checks are tooling work, not frontier-model work.
 
@@ -115,8 +121,11 @@ Require this loop:
    reopen obligations are closed.
 
 Finding a blocker changes the actual verdict to `BLOCKED`; it never ends the
-review. If budget, access, hash drift, scope, or an unvisited required cell
-prevents convergence, return `INCOMPLETE`.
+review. If hash, access, or scope failure prevents a trustworthy candidate
+judgment, return actual `INCOMPLETE`. If a blocker is already supported but
+required evidence, safe-sibling closure, or reopen obligations remain open,
+preserve actual `BLOCKED`, set `findingSetStatus` to
+`EVIDENCE_CLOSURE_INCOMPLETE`, and keep the counterfactual verdict unresolved.
 
 ## Keep verdicts non-substitutable
 
@@ -130,6 +139,11 @@ Use all three fields:
 `PASS_UNDER_ASSUMPTIONS` is a repair-planning result, never approval to merge,
 ship, release, migrate, preflight, or cut over. Any blocker means the actual
 candidate remains `BLOCKED`.
+
+`EVIDENCE_CLOSURE_INCOMPLETE` is also non-authorizing. It means the candidate
+is already known to be blocked while the complete blocker batch or required
+evidence closure remains unfinished. It can never substitute for
+`BATCH_COMPLETE` in a lane or `AUDITED_BATCH_COMPLETE` in synthesis.
 
 After implementation changes, freeze the actual new bytes, reacquire the
 mapped evidence, and obtain the project-required fresh review. Historical

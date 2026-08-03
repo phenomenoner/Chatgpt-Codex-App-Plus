@@ -35,16 +35,22 @@ class ReviewGateCliTests(unittest.TestCase):
                     {
                         "cellId": "authority/commit/windows",
                         "contractId": "authority-single-owner",
+                        "entrypoint": "control::commit",
+                        "operation": "commit authority-owned state",
                         "lifecyclePhase": "commit",
                         "variant": "windows",
+                        "expectedBehavior": "reject stale authority before mutation",
                         "required": True,
                         "requiredTier": "T2",
                     },
                     {
                         "cellId": "authority/rollback/windows",
                         "contractId": "authority-single-owner",
+                        "entrypoint": "control::rollback",
+                        "operation": "restore authority-owned state",
                         "lifecyclePhase": "rollback",
                         "variant": "windows",
+                        "expectedBehavior": "restore only with exact current authority",
                         "required": True,
                         "requiredTier": "T2",
                     },
@@ -401,6 +407,74 @@ class ReviewGateCliTests(unittest.TestCase):
         )
         self.assertEqual(len(wave["reviewWaveId"]), 64)
         self.assertEqual(wave["coverageMatrix"]["path"], str(self.matrix.resolve()))
+
+    def test_bind_rejects_non_atomic_matrix_cell(self):
+        matrix = json.loads(self.matrix.read_text(encoding="utf-8"))
+        del matrix["cells"][0]["expectedBehavior"]
+        self.matrix = self._write_json("coverage-matrix.json", matrix)
+
+        result = self._run(
+            "bind",
+            "--candidate-manifest",
+            self.candidate,
+            "--evidence-index",
+            self.evidence,
+            "--review-plan",
+            self.plan,
+            "--coverage-matrix",
+            self.matrix,
+            "--output",
+            self.wave,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expectedBehavior", result.stdout)
+
+    def test_accepts_blocked_report_with_incomplete_evidence_closure(self):
+        wave = self._bind()
+        report = self._base_report(wave)
+        report["findingSetStatus"] = "EVIDENCE_CLOSURE_INCOMPLETE"
+        report["counterfactualVerdict"] = "UNRESOLVED"
+        report["coverage"][1] = {
+            "cellId": "authority/rollback/windows",
+            "status": "EVIDENCE_GAP",
+            "closureSupport": "WRONG_TIER",
+            "highestEvidenceTier": "T1",
+            "evidence": [
+                self._evidence("Only source-level sibling evidence exists.", "T1")
+            ],
+            "findingIds": [],
+        }
+        report["verificationGaps"] = [
+            {
+                "id": "GAP-T2-ROLLBACK",
+                "cellIds": ["authority/rollback/windows"],
+                "blocksGate": True,
+                "reason": "The required rollback sibling has only T1 evidence.",
+                "requiredAction": "Acquire the matrix-required T2 evidence.",
+            }
+        ]
+        report["fixedPoint"]["stable"] = False
+        report["fixedPoint"]["unresolvedChallengeIds"] = ["GAP-T2-ROLLBACK"]
+        for check in report["fixedPoint"]["adversarialChecks"]:
+            if check["dimension"] == "EVIDENCE_ALTITUDE":
+                check["completed"] = False
+                check["note"] = "The required evidence altitude remains open."
+        report["stopping"] = {
+            "reason": "EVIDENCE_CLOSURE_INCOMPLETE",
+            "unvisitedRequiredCellIds": ["authority/rollback/windows"],
+            "note": "A supported blocker exists, but required evidence closure is open.",
+        }
+
+        result = self._validate(report)
+
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertTrue(payload["valid"])
+        self.assertEqual(payload["actualCandidateVerdict"], "BLOCKED")
+        self.assertEqual(
+            payload["findingSetStatus"], "EVIDENCE_CLOSURE_INCOMPLETE"
+        )
 
     def test_accepts_batch_complete_blocked_report_with_synthetic_pass(self):
         wave = self._bind()

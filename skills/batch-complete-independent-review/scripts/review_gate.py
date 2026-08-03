@@ -49,6 +49,7 @@ ADVERSARIAL_DIMENSIONS = {
 ACTUAL_VERDICTS = {"PASS", "BLOCKED", "INCOMPLETE"}
 FINDING_SET_STATUSES = {
     "BATCH_COMPLETE",
+    "EVIDENCE_CLOSURE_INCOMPLETE",
     "BUDGET_EXHAUSTED",
     "HASH_DRIFT",
     "ACCESS_BLOCKED",
@@ -62,6 +63,7 @@ COUNTERFACTUAL_VERDICTS = {
 }
 STOP_REASONS = {
     "COVERAGE_COMPLETE",
+    "EVIDENCE_CLOSURE_INCOMPLETE",
     "HASH_DRIFT",
     "ACCESS_FAILURE",
     "SCOPE_VIOLATION",
@@ -217,7 +219,15 @@ def _validate_matrix(matrix: Any) -> list[str]:
         if not isinstance(cell, dict):
             errors.append(f"{prefix} must be an object.")
             continue
-        for field in ("cellId", "contractId", "lifecyclePhase", "variant"):
+        for field in (
+            "cellId",
+            "contractId",
+            "entrypoint",
+            "operation",
+            "lifecyclePhase",
+            "variant",
+            "expectedBehavior",
+        ):
             if not _is_nonempty_string(cell.get(field)):
                 errors.append(f"{prefix}.{field} must be a non-empty string.")
         if _is_nonempty_string(cell.get("cellId")):
@@ -922,9 +932,16 @@ def _validate_report_semantics(
         if unvisited:
             errors.append("BATCH_COMPLETE requires no unvisited required cells.")
     elif finding_set in FINDING_SET_STATUSES:
-        if actual != "INCOMPLETE":
+        blocked_evidence_closure = (
+            finding_set == "EVIDENCE_CLOSURE_INCOMPLETE"
+            and actual == "BLOCKED"
+            and bool(blockers or blocking_gaps)
+        )
+        if actual != "INCOMPLETE" and not blocked_evidence_closure:
             errors.append(
-                "A non-complete finding set requires actualCandidateVerdict INCOMPLETE."
+                "A non-complete finding set requires actualCandidateVerdict INCOMPLETE, "
+                "except that EVIDENCE_CLOSURE_INCOMPLETE may preserve BLOCKED when a "
+                "supported blocker is already established."
             )
 
     expected_stop_status = {
@@ -933,6 +950,7 @@ def _validate_report_semantics(
         "SCOPE_VIOLATION": "SCOPE_ABORTED",
         "BUDGET_REACHED": "BUDGET_EXHAUSTED",
         "FINDING_OVERFLOW": "OVERFLOW_NEEDS_ENUMERATION",
+        "EVIDENCE_CLOSURE_INCOMPLETE": "EVIDENCE_CLOSURE_INCOMPLETE",
     }.get(stop_reason)
     if expected_stop_status and finding_set != expected_stop_status:
         errors.append(
@@ -954,10 +972,14 @@ def _validate_report_semantics(
     elif actual == "BLOCKED":
         if not blockers and not blocking_gaps:
             errors.append("BLOCKED requires at least one blocker or blocking gap.")
-        if finding_set != "BATCH_COMPLETE":
+        if finding_set not in {
+            "BATCH_COMPLETE",
+            "EVIDENCE_CLOSURE_INCOMPLETE",
+        }:
             errors.append(
-                "A report with an incomplete finding set must use actualCandidateVerdict "
-                "INCOMPLETE, even if blockers are already known."
+                "BLOCKED with an incomplete finding set is allowed only for "
+                "EVIDENCE_CLOSURE_INCOMPLETE; other incomplete states require "
+                "actualCandidateVerdict INCOMPLETE."
             )
     elif actual == "INCOMPLETE" and finding_set == "BATCH_COMPLETE":
         errors.append("INCOMPLETE cannot be paired with BATCH_COMPLETE.")

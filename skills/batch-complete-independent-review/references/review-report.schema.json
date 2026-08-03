@@ -56,6 +56,7 @@
     "findingSetStatus": {
       "enum": [
         "BATCH_COMPLETE",
+        "EVIDENCE_CLOSURE_INCOMPLETE",
         "BUDGET_EXHAUSTED",
         "HASH_DRIFT",
         "ACCESS_BLOCKED",
@@ -92,6 +93,7 @@
         "reason": {
           "enum": [
             "COVERAGE_COMPLETE",
+            "EVIDENCE_CLOSURE_INCOMPLETE",
             "HASH_DRIFT",
             "ACCESS_FAILURE",
             "SCOPE_VIOLATION",

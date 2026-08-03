@@ -15,19 +15,22 @@
         "required": [
           "cellId",
           "contractId",
+          "entrypoint",
+          "operation",
           "lifecyclePhase",
           "variant",
+          "expectedBehavior",
           "required",
           "requiredTier"
         ],
         "properties": {
           "cellId": {"type": "string", "minLength": 1},
           "contractId": {"type": "string", "minLength": 1},
-          "entrypoint": {"type": "string"},
-          "operation": {"type": "string"},
+          "entrypoint": {"type": "string", "minLength": 1},
+          "operation": {"type": "string", "minLength": 1},
           "lifecyclePhase": {"type": "string", "minLength": 1},
           "variant": {"type": "string", "minLength": 1},
-          "expectedBehavior": {"type": "string"},
+          "expectedBehavior": {"type": "string", "minLength": 1},
           "required": {"type": "boolean"},
           "requiredTier": {"enum": ["T0", "T1", "T2", "T3", "T4"]}
         }

@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 11779,
+      "bytes": 12698,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/SKILL.md",
-      "sha256": "9bc5a2593aafc74dee19d2371170927606ea717f47c03232f516a071c8c4fe13"
+      "sha256": "ffc099ff2f75f2c1c5384339250e7bf32b5f0df339c55bade9e00cb95b3ed216"
     },
     {
       "bytes": 299,
@@ -13,10 +13,10 @@
       "sha256": "765d6c0f8355af6323e363d670ba14b6098815fc16d5b9883560449bc5b8aac2"
     },
     {
-      "bytes": 1139,
+      "bytes": 1264,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/references/coverage-matrix.schema.json",
-      "sha256": "f0d545d636ad8a5c2b3df7107aa570e3c9e03933bb31213d8b639066a3905b34"
+      "sha256": "54483fc5253e1a9b0210bdbfe0a18c7b868080207685d0e535950cf31a4ca5e7"
     },
     {
       "bytes": 7357,
@@ -25,16 +25,16 @@
       "sha256": "9e95e87e65e62ad0b092dfa78927e047a04d094ffa9e804093ee2db79ab7536f"
     },
     {
-      "bytes": 10781,
+      "bytes": 11551,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/references/protocol.md",
-      "sha256": "8e56bd59f403da691763a5ec449a0b61041bde1c27bce7f5b1ca98c3efbdcd54"
+      "sha256": "74fd46d8d41041cb81f7a80e70b2015421a44cb53e5e5343accb2f5c31379520"
     },
     {
-      "bytes": 10027,
+      "bytes": 10109,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/references/review-report.schema.json",
-      "sha256": "97f2a0e001be4c435bfc1e545fa1a70e86d789fc71e2df0488eefd98bf1fc96c"
+      "sha256": "c0f1199c9df4a9479b6be811594982824322aaa9122330014d67239dc0bf98aa"
     },
     {
       "bytes": 1099,
@@ -49,16 +49,16 @@
       "sha256": "6bded6d32d5c080687ec5696886e1d25bbd166923e73f2f436abeb9becb64c4b"
     },
     {
-      "bytes": 91776,
+      "bytes": 92553,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/scripts/review_gate.py",
-      "sha256": "aa131554f8177e8e08b12305fd394066c2e2537c5e4a0fef9e96022af82d72a5"
+      "sha256": "06d99bdc4303f40a0d5ad5ba65a39c0c428a3fda6295d305d101b9a09d61d5f6"
     },
     {
-      "bytes": 30631,
+      "bytes": 33778,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/tests/test_review_gate.py",
-      "sha256": "cd94a0a65a31350df934f0de20c8fbc06fe8839930d84060be44053cafcd6ebd"
+      "sha256": "2b65c23a2cf0256a49ca400ed3089b7e6233d0f3a0983279fb83c47f99164012"
     },
     {
       "bytes": 4010,
