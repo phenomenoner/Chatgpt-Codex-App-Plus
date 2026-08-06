@@ -233,6 +233,27 @@ class ContextCanvasTests(unittest.TestCase):
             self.assertEqual(len(calls), first_count)
         self.assertGreaterEqual(first_count, 2)
 
+    @unittest.skipUnless(os.name == "nt", "Windows ACL replacement behavior")
+    def test_windows_hardening_replaces_preexisting_explicit_acl(self) -> None:
+        directory = self.base / "preexisting-explicit-acl"
+        directory.mkdir()
+        account, sid = canvas._current_windows_identity()
+        seeded = canvas._run_os_command(
+            [
+                "icacls.exe",
+                os.fspath(directory),
+                "/inheritance:r",
+                "/grant:r",
+                f"*{sid}:(OI)(CI)F",
+                "/grant:r",
+                "*S-1-5-18:(OI)(CI)F",
+            ]
+        )
+        self.assertEqual(seeded.returncode, 0, seeded.stderr or seeded.stdout)
+
+        canvas._harden_and_verify_directory_acl(directory)
+        canvas._verify_windows_acl(directory, account)
+
     def test_cross_process_writes_keep_all_nodes_and_unique_ids(self) -> None:
         self.initialize()
         environment = os.environ.copy()
@@ -375,7 +396,7 @@ class ContextCanvasTests(unittest.TestCase):
                 self.store.initialize(alias_id, goal="Alias must fail closed")
         finally:
             if os.path.lexists(alias):
-                os.rmdir(alias)
+                os.rmdir(alias) if os.name == "nt" else alias.unlink()
 
     def test_invalid_json_fails_closed_without_injection(self) -> None:
         self.initialize()
@@ -536,7 +557,8 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertEqual(hooks["hooks"]["SessionStart"][0], existing_group)
         self.assertEqual(len(hooks["hooks"]["SessionStart"]), 2)
         handler = hooks["hooks"]["SessionStart"][1]["hooks"][0]
-        self.assertIn(str(installed_script), handler["commandWindows"])
+        canonical_script = codex_home.resolve(strict=False) / "context-canvas-codex" / "context_canvas.py"
+        self.assertIn(str(canonical_script), handler["commandWindows"])
 
         _, checked = run("check")
         self.assertTrue(checked["ok"])

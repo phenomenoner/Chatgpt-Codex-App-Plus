@@ -364,20 +364,76 @@ def _verify_windows_acl(path: Path, expected_account: str) -> None:
         raise SecurityBoundaryError("Windows ACL grants an unexpected permission rule")
 
 
+def _set_restrictive_windows_acl(path: Path, sid: str) -> None:
+    from ctypes import wintypes
+
+    advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
+    security_descriptor = ctypes.c_void_p()
+    descriptor_size = wintypes.ULONG()
+    convert = advapi32.ConvertStringSecurityDescriptorToSecurityDescriptorW
+    convert.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(wintypes.ULONG),
+    ]
+    convert.restype = wintypes.BOOL
+    sddl = f"D:P(A;OICI;FA;;;{sid})"
+    if not convert(sddl, 1, ctypes.byref(security_descriptor), ctypes.byref(descriptor_size)):
+        raise SecurityBoundaryError("restrictive Windows security descriptor could not be built")
+    try:
+        dacl_present = wintypes.BOOL()
+        dacl_defaulted = wintypes.BOOL()
+        dacl = ctypes.c_void_p()
+        get_dacl = advapi32.GetSecurityDescriptorDacl
+        get_dacl.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(wintypes.BOOL),
+            ctypes.POINTER(ctypes.c_void_p),
+            ctypes.POINTER(wintypes.BOOL),
+        ]
+        get_dacl.restype = wintypes.BOOL
+        if not get_dacl(
+            security_descriptor,
+            ctypes.byref(dacl_present),
+            ctypes.byref(dacl),
+            ctypes.byref(dacl_defaulted),
+        ) or not dacl_present.value or not dacl.value:
+            raise SecurityBoundaryError("restrictive Windows DACL could not be extracted")
+
+        set_named_security_info = advapi32.SetNamedSecurityInfoW
+        set_named_security_info.argtypes = [
+            wintypes.LPWSTR,
+            wintypes.DWORD,
+            wintypes.DWORD,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+        ]
+        set_named_security_info.restype = wintypes.DWORD
+        result = set_named_security_info(
+            os.fspath(path),
+            1,  # SE_FILE_OBJECT
+            0x80000004,  # PROTECTED_DACL_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION
+            None,
+            None,
+            dacl,
+            None,
+        )
+        if result != 0:
+            raise SecurityBoundaryError("restrictive Windows ACL could not be applied")
+    finally:
+        local_free = ctypes.WinDLL("kernel32", use_last_error=True).LocalFree
+        local_free.argtypes = [ctypes.c_void_p]
+        local_free.restype = ctypes.c_void_p
+        local_free(security_descriptor)
+
+
 def _harden_and_verify_directory_acl(path: Path) -> None:
     if os.name == "nt":
         account, sid = _current_windows_identity()
-        result = _run_os_command(
-            [
-                "icacls.exe",
-                os.fspath(path),
-                "/inheritance:r",
-                "/grant:r",
-                f"*{sid}:(OI)(CI)F",
-            ]
-        )
-        if result.returncode != 0:
-            raise SecurityBoundaryError("icacls could not establish a restrictive ACL")
+        _set_restrictive_windows_acl(path, sid)
         _verify_windows_acl(path, account)
     else:
         os.chmod(path, 0o700)
