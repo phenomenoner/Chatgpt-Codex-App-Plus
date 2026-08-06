@@ -7,7 +7,7 @@ Publish reusable Codex customization without turning a personal Codex home into 
 ## Trust boundaries
 
 ```text
-personal Codex and agent homes
+personal Codex, agent, and authored-plugin homes
           |
           | explicit source manifest only
           v
@@ -15,7 +15,7 @@ personal Codex and agent homes
           |
           | normalized UTF-8/LF files
           v
-  vendored public skills + SHA-256 lock
+  vendored public skills/plugins + SHA-256 lock
           |
           | tests + repository-wide hygiene scan
           v
@@ -45,14 +45,16 @@ An exception is possible only for a non-secret finding named in the exporter's f
 - byte length;
 - SHA-256.
 
-Validation rejects missing, modified, or extra skill files and requires the pointer set to match the source manifest.
+Validation rejects missing, modified, or extra files under every vendored destination and requires the pointer set to match the source manifest.
 
 ## Distribution layers
 
 - `skills/`: directly installable workflow packages.
+- `plugins/`: self-contained community plugins; runtime data is never vendored.
+- `.agents/plugins/marketplace.json`: repository marketplace metadata pointing only at checked-in plugin sources.
 - `config/`: safe examples, not a copy of a private profile.
 - `catalog/`: human-facing component purpose, maturity, and requirements.
 - `manifest/`: machine-enforced export authority and lock.
 - `scripts/`: deterministic export, validation, and installation helpers.
 
-The collection may become a plugin later. That step should add plugin metadata and installation UX without weakening the current source, license, or public-safety boundaries.
+The collection is not wrapped into one monolithic plugin. Individual capabilities may ship as plugins when they need a bundled MCP server or lifecycle hook; workflow-only components remain skills. Adding a plugin must not weaken the same source, license, lock, or public-safety boundaries.

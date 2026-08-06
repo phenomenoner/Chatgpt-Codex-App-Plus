@@ -1,0 +1,15 @@
+Context Canvas Codex
+
+This is a clean Codex adapter inspired by the factual-node -> evidence-ref
+invariant described by hermes-agent-harness-plus at the pinned upstream commit:
+
+  repository: https://github.com/phenomenoner/hermes-agent-harness-plus
+  comparison commit: 7d6beb485d658a0342194c0e42edcdb7106ed1cb
+
+No upstream source code was copied. The upstream project is licensed under the
+MIT License and carries this notice:
+
+  Copyright (c) 2026 hermes-agent-harness-plus contributors
+
+The upstream license and attribution are preserved here for clarity. This
+adapter is also distributed under the MIT License in LICENSE.

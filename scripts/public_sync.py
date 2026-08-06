@@ -192,8 +192,8 @@ def _validate_manifest(manifest: Any) -> list[str]:
             ids.add(component_id)
         mode = component.get("mode")
         if mode == "vendor":
-            if component.get("sourceRoot") not in {"codex", "agents"}:
-                errors.append(f"{prefix}.sourceRoot must be codex or agents.")
+            if component.get("sourceRoot") not in {"codex", "agents", "plugins"}:
+                errors.append(f"{prefix}.sourceRoot must be codex, agents, or plugins.")
             for field in ("source", "destination"):
                 if not isinstance(component.get(field), str) or not component[field]:
                     errors.append(f"{prefix}.{field} must be a non-empty string.")
@@ -491,14 +491,19 @@ def _validate_lock(repository_root: Path) -> list[str]:
         data = path.read_bytes()
         if item.get("bytes") != len(data) or item.get("sha256") != _sha256(data):
             errors.append(f"Locked public file drifted: {relative}")
-    actual_skill_files = {
-        path.relative_to(repository_root).as_posix()
-        for path in (repository_root / "skills").rglob("*")
-        if path.is_file() or path.is_symlink()
-    } if (repository_root / "skills").exists() else set()
-    extras = actual_skill_files - locked_paths
+    actual_vendor_files: set[str] = set()
+    # Scan the complete distribution roots, not only manifest destinations.
+    # Otherwise a new unlisted skill or plugin directory could bypass the lock.
+    for root_name in ("skills", "plugins"):
+        distribution_root = repository_root / root_name
+        if not distribution_root.exists():
+            continue
+        for path in distribution_root.rglob("*"):
+            if path.is_file() or path.is_symlink():
+                actual_vendor_files.add(path.relative_to(repository_root).as_posix())
+    extras = actual_vendor_files - locked_paths
     if extras:
-        errors.append("Untracked public skill files: " + ", ".join(sorted(extras)))
+        errors.append("Untracked vendor files: " + ", ".join(sorted(extras)))
     expected_pointers = sorted(
         (
             {
@@ -541,6 +546,7 @@ def _sync_command(args: argparse.Namespace) -> int:
     source_roots = {
         "codex": Path(args.codex_home).resolve(),
         "agents": Path(args.agents_home).resolve(),
+        "plugins": Path(args.plugins_home).resolve(),
     }
     desired, pointers, errors = _collect_desired(
         manifest, repository_root, source_roots
@@ -625,6 +631,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     sync.add_argument("--codex-home", default=str(_default_codex_home()))
     sync.add_argument("--agents-home", default=str(Path.home() / ".agents"))
+    sync.add_argument("--plugins-home", default=str(Path.home() / "plugins"))
     sync.add_argument("--apply", action="store_true")
     sync.set_defaults(handler=_sync_command)
 

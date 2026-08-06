@@ -1,0 +1,35 @@
+{
+  "name": "context-canvas-codex",
+  "version": "0.2.0",
+  "description": "Local, evidence-pointer-only task maps for Codex App and CLI.",
+  "author": {
+    "name": "phenomenoner"
+  },
+  "homepage": "https://github.com/phenomenoner/Chatgpt-Codex-App-Plus",
+  "repository": "https://github.com/phenomenoner/Chatgpt-Codex-App-Plus",
+  "license": "MIT",
+  "keywords": [
+    "context-management",
+    "checkpoint",
+    "evidence",
+    "windows"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Context Canvas Codex",
+    "shortDescription": "Map and recover evidence-backed task state.",
+    "longDescription": "Keeps bounded task facts, dependencies, and hash-bound evidence pointers in a local Windows-hardened store shared by Codex App, Codex CLI, and a bundled MCP server. It never captures tool output or reads evidence content.",
+    "developerName": "phenomenoner",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Create a safe checkpoint for this long-running task.",
+      "Restore this task's active blockers after compaction.",
+      "Search this task's pointer-only Context Canvas and prepare a closeout."
+    ]
+  }
+}

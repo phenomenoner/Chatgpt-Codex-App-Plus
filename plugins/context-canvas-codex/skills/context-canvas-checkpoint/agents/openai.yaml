@@ -1,0 +1,4 @@
+interface:
+  display_name: "Context Canvas Checkpoint"
+  short_description: "Maintain compact evidence-backed task checkpoints"
+  default_prompt: "Use $context-canvas-checkpoint to record or restore this task checkpoint."

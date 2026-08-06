@@ -16,9 +16,11 @@ class PublicSyncTests(unittest.TestCase):
         self.repo = self.root / "repo"
         self.codex = self.root / "codex"
         self.agents = self.root / "agents"
+        self.plugins = self.root / "plugins"
         (self.repo / "manifest").mkdir(parents=True)
         (self.codex / "skills" / "sample").mkdir(parents=True)
         self.agents.mkdir()
+        self.plugins.mkdir()
         (self.codex / "skills" / "sample" / "SKILL.md").write_text(
             "---\nname: sample\ndescription: Safe sample.\n---\n\n# Sample\n",
             encoding="utf-8",
@@ -62,7 +64,7 @@ class PublicSyncTests(unittest.TestCase):
                 command,
                 "--repo-root",
                 str(self.repo),
-                *( ["--manifest", str(self.manifest), "--codex-home", str(self.codex), "--agents-home", str(self.agents)] if command == "sync" else [] ),
+                *( ["--manifest", str(self.manifest), "--codex-home", str(self.codex), "--agents-home", str(self.agents), "--plugins-home", str(self.plugins)] if command == "sync" else [] ),
                 *extra,
             ],
             text=True,
@@ -120,6 +122,70 @@ class PublicSyncTests(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         payload = json.loads(result.stdout)
         self.assertTrue(any("drifted" in error for error in payload["errors"]))
+
+    def test_plugin_source_root_is_explicitly_vendored_and_extra_files_fail_validation(self):
+        source = self.plugins / "sample-plugin"
+        (source / ".codex-plugin").mkdir(parents=True)
+        (source / ".codex-plugin" / "plugin.json").write_text(
+            json.dumps(
+                {
+                    "name": "sample-plugin",
+                    "version": "1.0.0",
+                    "description": "Safe local test plugin",
+                }
+            ),
+            encoding="utf-8",
+        )
+        self.manifest.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": "codex-plus-public-sources.v1",
+                    "components": [
+                        {
+                            "id": "sample-plugin",
+                            "mode": "vendor",
+                            "sourceRoot": "plugins",
+                            "source": "sample-plugin",
+                            "destination": "plugins/sample-plugin",
+                            "include": ["*", "**/*"],
+                            "exclude": [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        applied = self._run("sync", "--apply")
+
+        self.assertEqual(applied.returncode, 0, applied.stderr or applied.stdout)
+        copied = self.repo / "plugins" / "sample-plugin" / ".codex-plugin" / "plugin.json"
+        self.assertTrue(copied.is_file())
+        (self.repo / "plugins" / "sample-plugin" / "untracked.txt").write_text(
+            "not in the generated lock", encoding="utf-8"
+        )
+
+        validated = self._run("validate")
+
+        self.assertEqual(validated.returncode, 1)
+        payload = json.loads(validated.stdout)
+        self.assertTrue(any("Untracked vendor files" in error for error in payload["errors"]))
+
+    def test_unlisted_skill_directory_still_fails_lock_validation(self):
+        applied = self._run("sync", "--apply")
+        self.assertEqual(applied.returncode, 0, applied.stderr or applied.stdout)
+        unlisted = self.repo / "skills" / "not-in-manifest"
+        unlisted.mkdir(parents=True)
+        (unlisted / "SKILL.md").write_text(
+            "---\nname: unlisted\ndescription: Must not bypass the lock.\n---\n",
+            encoding="utf-8",
+        )
+
+        validated = self._run("validate")
+
+        self.assertEqual(validated.returncode, 1)
+        payload = json.loads(validated.stdout)
+        self.assertTrue(any("Untracked vendor files" in error for error in payload["errors"]))
 
 
 if __name__ == "__main__":

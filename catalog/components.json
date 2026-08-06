@@ -2,6 +2,18 @@
   "schemaVersion": "codex-plus-component-catalog.v1",
   "components": [
     {
+      "id": "context-canvas-codex",
+      "distribution": "plugin",
+      "defaultInstall": false,
+      "maturity": "beta",
+      "requires": [
+        "Codex plugin support",
+        "Codex SessionStart through native plugin hooks or the explicit user-hook adapter",
+        "Python 3.11+ available as python"
+      ],
+      "summary": "Keep a local, dependency-aware task map with hash-bound evidence pointers, bounded search, closeout, SessionStart recovery, and shared App/CLI MCP tools."
+    },
+    {
       "id": "batch-complete-independent-review",
       "distribution": "vendored",
       "defaultInstall": true,

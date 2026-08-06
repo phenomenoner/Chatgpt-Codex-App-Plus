@@ -23,6 +23,9 @@ jobs:
           python-version: "3.11"
       - name: Run sync contract tests
         run: python -m unittest discover -s tests -v
+      - name: Run Context Canvas plugin regressions
+        working-directory: plugins/context-canvas-codex
+        run: python -W error::ResourceWarning -I scripts/test_context_canvas.py
       - name: Run review gate contract tests
         working-directory: skills/batch-complete-independent-review
         run: python -m unittest discover -s tests -v

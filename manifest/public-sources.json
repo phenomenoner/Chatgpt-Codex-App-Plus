@@ -2,6 +2,15 @@
   "schemaVersion": "codex-plus-public-sources.v1",
   "components": [
     {
+      "id": "context-canvas-codex",
+      "mode": "vendor",
+      "sourceRoot": "plugins",
+      "source": "context-canvas-codex",
+      "destination": "plugins/context-canvas-codex",
+      "include": ["*", "**/*"],
+      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+    },
+    {
       "id": "batch-complete-independent-review",
       "mode": "vendor",
       "sourceRoot": "codex",

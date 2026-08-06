@@ -1,0 +1,20 @@
+{
+  "description": "Read-only Context Canvas recovery on Codex session start or compaction.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "^(startup|resume|clear|compact)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"${PLUGIN_ROOT}/scripts/context_canvas.py\" hook-session-start",
+            "commandWindows": "python -I \"$env:PLUGIN_ROOT\\scripts\\context_canvas.py\" hook-session-start",
+            "timeout": 10,
+            "statusMessage": "Restoring bounded task checkpoint",
+            "additionalContextLimit": 5000
+          }
+        ]
+      }
+    ]
+  }
+}
