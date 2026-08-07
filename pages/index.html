@@ -802,6 +802,11 @@
     .presentation-clean .topbar { opacity: 0; transform: translate(-50%, -130%); pointer-events: none; }
     .presentation-clean .progress-rail { opacity: 0; pointer-events: none; }
 
+    @media (min-width: 981px) {
+      /* Desktop seminar density: equivalent to browser zoom at 90%; mobile stays untouched. */
+      body { zoom: 0.9; }
+    }
+
     @media (max-width: 980px) {
       .hero-grid, .problem-grid, .canvas-grid, .baton-layout, .luna-layout, .cta-layout { grid-template-columns: 1fr; }
       .hero-grid { gap: 35px; }
