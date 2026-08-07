@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 1247,
+      "bytes": 1497,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/.codex-plugin/plugin.json",
-      "sha256": "dcd28444c787301e619af4852458e380a29ecd1443f110718dd8904610d239f9"
+      "sha256": "30cb4391e3e746a941b7f50db1d47d71887a323943605dd0f01920bcc71caffc"
     },
     {
       "bytes": 226,
@@ -25,58 +25,64 @@
       "sha256": "14fc5530a71e04722a9e72a9177723fe0443eb3f639f60d36d87cd4a2d4e8ab3"
     },
     {
-      "bytes": 5820,
+      "bytes": 11065,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/README.md",
-      "sha256": "bec8aac9d59c085e92d697f2b9f37a91d1e545b4ae92a776da5a47b92c33ac91"
+      "sha256": "8356ced7b0558a211eb11d79f7a921720aed52db618118a265026f9515b068c6"
     },
     {
-      "bytes": 3845,
+      "bytes": 8101,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/SECURITY.md",
-      "sha256": "2081625c98a02861d705c278ea3982075dab4b812a3e833477a7e3873670f024"
+      "sha256": "a9a42b6c11d1b177bf289395f086dc089fbd67666abc84d6e5f9f3bf480c8dff"
     },
     {
-      "bytes": 644,
+      "bytes": 10190,
+      "componentId": "context-canvas-codex",
+      "path": "plugins/context-canvas-codex/docs/SNAPSHOT_STORE_DESIGN.md",
+      "sha256": "1730044a9489ffa0b8d5fea708940f7518f202b137af80caeace9fed736e3ab9"
+    },
+    {
+      "bytes": 1106,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/hooks/hooks.json",
-      "sha256": "2e080297aba2feeb7c04f35eecc3fed807dd4d27cf0a14ae88c5500598bfbc69"
+      "sha256": "2fbf237221d610828125953d93557bd89c4dffe4948a55a44681361abfe2c01a"
     },
     {
-      "bytes": 6490,
+      "bytes": 10824,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/benchmark_context_canvas.py",
-      "sha256": "769011c7b1dc33834e2f077ffde4816aa6b5071efb984ef72a7c34b2d6e14893"
+      "sha256": "65b3f1ab6b1d8fb69522fbd46d91d47b524fed294e5f21c9a5e36767c99ec3b6"
     },
     {
-      "bytes": 57807,
+      "bytes": 148110,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas.py",
-      "sha256": "f36620929f18dc14e804c93abbc7dcc0c034b17745dd9ec19c4e2af93360b714"
+      "sha256": "38ff97be4bc70d198465886aa7e887fd80e2da08452081d66fb232a8474a99a7"
     },
     {
-      "bytes": 14090,
+      "bytes": 17524,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas_mcp.py",
-      "sha256": "a865f65c43c4138fdf8b8675c77c22f0c0fba1f41681a04e2a5f3d0211db482a"
+      "sha256": "dd87451a90baa0c8a7b6111516261fb47318d8f924478fc0fd0dc2badb1ddca6"
     },
     {
-      "bytes": 16268,
+      "bytes": 20057,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/install_context_canvas_hook.py",
-      "sha256": "81f11b4f99df6e5613d10874dcfdcaeb5bcb15e80b911d4d50b19d821f01e20d"
+      "sha256": "c5e012c36e7c3a6431d62f6e15b4fa3280edca852dd4e4c11f17597d8025ab2f"
     },
     {
-      "bytes": 38802,
+      "bytes": 103851,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/test_context_canvas.py",
-      "sha256": "c53706badb9ffb2cc5f9fe3630a8176ddc3b83403cda94f57b8700bad70ac543"
+      "sha256": "e1c7a2d5c678576fd5ba2f5fcd101c2e8f726cffcdfeae970c795891d543dff3"
     },
     {
-      "bytes": 5695,
+      "bytes": 6932,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/SKILL.md",
-      "sha256": "d1da07a0b8d96d627015f66213423e2a341f5f155f1f02de5e1ca02a1202598b"
+      "sha256": "cb338e61972ab84aabac7dcce2cd89b5398e2f56a40510d21c3fc6484191cca6"
     },
     {
       "bytes": 222,
@@ -223,10 +229,10 @@
       "sha256": "b619a057a523fa4a7eab4667fc810f8f8065d7ad972692615997c66976d7974e"
     },
     {
-      "bytes": 6088,
+      "bytes": 23199,
       "componentId": "long-run-supervisor",
       "path": "skills/long-run-supervisor/SKILL.md",
-      "sha256": "9780ba3cc59e3b524cfa4f775d968f0229193562907016db28437f69782169b3"
+      "sha256": "6b3e0204a8032426dd96d7aae9699d6a1708c91351e6a20670801e1b6e004d2d"
     },
     {
       "bytes": 312,
@@ -321,11 +327,11 @@
   ],
   "pointers": [
     {
-      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
-      "commit": "c1a05b2ac12ce00df0e5feb90fb42191f935c9c7",
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing",
+      "commit": "69b805df9df2252119b7a87886097f8cafd5e11a",
       "id": "baton-fanout-skill",
       "license": "MIT",
-      "version": "v1.0.0"
+      "version": "codex-routing-2026-08-07"
     },
     {
       "canonicalUrl": "https://github.com/openai/skills",

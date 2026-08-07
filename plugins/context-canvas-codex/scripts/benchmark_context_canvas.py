@@ -106,6 +106,48 @@ def _mcp_samples(environment: dict[str, str], canvas_id: str, iterations: int) -
             raise RuntimeError(f"MCP benchmark server exited {process.returncode}: {stderr}")
 
 
+def _cold_snapshot_samples(
+    environment: dict[str, str], iterations: int, *, response_text: str
+) -> list[float]:
+    counter = 0
+
+    def capture() -> None:
+        nonlocal counter
+        counter += 1
+        payload = {
+            "session_id": "benchmark-snapshot-session",
+            "turn_id": "benchmark-snapshot-turn",
+            "transcript_path": None,
+            "cwd": os.getcwd(),
+            "hook_event_name": "PostToolUse",
+            "model": "benchmark-model",
+            "permission_mode": "default",
+            "tool_name": "mcp__benchmark__read",
+            "tool_use_id": f"benchmark-call-{len(response_text)}-{counter}",
+            "tool_input": {"fixture": "snapshot"},
+            "tool_response": {"text": response_text},
+        }
+        completed = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+            input=json.dumps(payload, separators=(",", ":")),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=environment,
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        if completed.returncode != 0 or completed.stdout or completed.stderr:
+            raise RuntimeError(
+                f"snapshot hook benchmark failed ({completed.returncode}): {completed.stderr}"
+            )
+
+    return _measure(iterations, capture)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Benchmark Context Canvas local read surfaces")
     parser.add_argument("--iterations", type=int, default=40)
@@ -157,8 +199,56 @@ def main(argv: list[str] | None = None) -> int:
 
         cli = _measure(args.cold_cli_iterations, cold_cli)
         mcp = _mcp_samples(environment, canvas_id, args.iterations)
+        snapshots = canvas.SnapshotStore(root=root)
+        snapshot_payload = {
+            "session_id": "benchmark-snapshot-in-process",
+            "turn_id": "benchmark-turn",
+            "transcript_path": None,
+            "cwd": str(Path.cwd()),
+            "hook_event_name": "PostToolUse",
+            "model": "benchmark-model",
+            "permission_mode": "default",
+            "tool_name": "mcp__benchmark__read",
+            "tool_use_id": "benchmark-in-process",
+            "tool_input": {"fixture": "small"},
+            "tool_response": {"text": "snapshot-result-" + ("x" * 4096)},
+        }
+        started = time.perf_counter_ns()
+        first_snapshot = snapshots.capture_post_tool_use(snapshot_payload)
+        first_snapshot_ms = (time.perf_counter_ns() - started) / 1_000_000
+        snapshots.capture_post_tool_use(snapshot_payload)
+        snapshot_dedupe = _measure(
+            args.iterations,
+            lambda: snapshots.capture_post_tool_use(snapshot_payload),
+        )
+        snapshot_manifest = _measure(
+            args.iterations,
+            lambda: snapshots.read_event(
+                first_snapshot["canvas_id"], first_snapshot["event_id"]
+            ),
+        )
+        snapshot_gc_preview = _measure(
+            args.iterations, lambda: snapshots.gc(apply=False)
+        )
+        cold_snapshot = _cold_snapshot_samples(
+            environment,
+            args.cold_cli_iterations,
+            response_text="cold-hook-result-" + ("x" * 4096),
+        )
+        large_text = "large-snapshot-" + ("資料" * (512 * 1024))
+        large_samples = _cold_snapshot_samples(
+            environment, 1, response_text=large_text
+        )
+        object_path = next(
+            (root / "_snapshots" / "objects" / "sha256").rglob(
+                f"{first_snapshot['sha256']}.json.gz"
+            )
+        )
+        manifest = snapshots.read_event(
+            first_snapshot["canvas_id"], first_snapshot["event_id"]
+        )["manifest"]
         report = {
-            "schema": "context-canvas-codex-benchmark.v1",
+            "schema": "context-canvas-codex-benchmark.v2",
             "platform": sys.platform,
             "python": sys.version.split()[0],
             "node_count": 13,
@@ -167,6 +257,20 @@ def main(argv: list[str] | None = None) -> int:
                 "in_process_search": _summary(search),
                 "persistent_mcp_read": _summary(mcp),
                 "cold_cli_read": _summary(cli),
+                "snapshot_first_write": _summary([first_snapshot_ms]),
+                "snapshot_dedupe_hit": _summary(snapshot_dedupe),
+                "snapshot_manifest_read": _summary(snapshot_manifest),
+                "snapshot_gc_preview": _summary(snapshot_gc_preview),
+                "cold_post_tool_hook_small": _summary(cold_snapshot),
+                "cold_post_tool_hook_large": _summary(large_samples),
+            },
+            "snapshot_probe": {
+                "sanitized_bytes": manifest["sanitized_bytes"],
+                "compressed_bytes": object_path.stat().st_size,
+                "compression_ratio": round(
+                    object_path.stat().st_size / manifest["sanitized_bytes"], 4
+                ),
+                "large_hook_input_chars": len(large_text),
             },
         }
         print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))

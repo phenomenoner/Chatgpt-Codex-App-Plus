@@ -21,7 +21,7 @@
 Codex 很強，但真正順手的工作環境通常散落在個人設定、skills、PowerShell 工具與長期累積的操作規則裡。這個 repo 把其中可公開、可重用的部分整理成一套「Plus」層：
 
 - 一次找齊：reviewer 發現第一個 blocker 後不停止，持續做到 coverage closure。
-- 長任務留得住：Context Canvas 把 goal、blocker、decision、dependency 與驗證雜湊留在本機，不用每次 compaction 後重新翻 scrollback。
+- 長任務留得住：Context Canvas 把語意 task map 與依明示 sanitization policy 保存的歷史 tool snapshots 分層留在本機，不用每次 compaction 或事後稽核都重新抓資料。
 - 長跑省回合：本機 supervisor 負責 heartbeat、停滯判定與終態喚醒，減少高脈絡輪詢。
 - 分工有煞車：需要 subagent 時先做成本、獨立性與寫入所有權判斷。
 - 設定可重現：提供安全預設、全域 `AGENTS.md` 範例與可選安裝器。
@@ -31,7 +31,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 
 | Component | 解決什麼問題 | 發佈方式 |
 |---|---|---|
-| `context-canvas-codex` | Codex App／CLI 的本機 task map、hash-bound evidence pointer、resume/compact 恢復、搜尋與 closeout | 內含 plugin、選配 |
+| `context-canvas-codex` | 本機 semantic task map、hash-bound evidence、resume/compact 恢復，以及 content-addressed、deduplicated、TTL/pin 管理的 sanitized tool snapshots | 內含 plugin、選配 |
 | `batch-complete-independent-review` | blocker 批次完整度、counterfactual fixed-point review、hash-bound verdict | 內含 |
 | `long-run-supervisor` | 長時間命令的低成本監督與 wake-only 回報 | 內含 |
 | `codex-cli-luna-worker` | 在原生協作介面沒有 Luna 時，以唯讀 patch worker 補位 | 內含 |
@@ -39,7 +39,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 | `incident-to-regression` | 把事故轉成可重播、可驗證的 regression package | 內含 |
 | `claude-independent-review` | 明示授權後，以 Claude CLI 做獨立、hash-bound review | 內含、選配 |
 | `operate-a2a-superhub` | A2A Superhub 的 bounded operation 與診斷流程 | 內含、選配 |
-| `baton-fanout-skill` | subagent dispatch brake 與 ownership contract | [上游 pointer](https://github.com/phenomenoner/baton-fanout-skill) |
+| `baton-fanout-skill` | Codex subagent dispatch brake、Luna/max bounded codegen route 與相對 working lane 的 review floor | [Codex 專用 branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing) |
 | Understand Anything | codebase knowledge graph 與理解工具 | [上游 pointer](https://github.com/Egonex-AI/Understand-Anything) |
 | OpenAI skills | 官方與 curated skills | [上游 pointer](https://github.com/openai/skills) |
 
@@ -65,15 +65,16 @@ codex plugin list
 
 先開一個新 task，確認模型真的收到該 task 的 opaque Context Canvas ID。
 若只有 plugin／skill／MCP 出現、卻沒有新 ID，請從本 repo 根目錄安裝同一份
-read-only hook 到 Codex 的 user config layer：
+`SessionStart`＋`PostToolUse` hook pair 到 Codex 的 user config layer：
 
 ```powershell
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py install
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-接著在 Codex CLI 用 `/hooks` 檢查並信任這個 `SessionStart` 定義，再開一個
-全新 task 重驗 ID 與 `canvas_*` MCP tools。Codex CLI 0.146.0 的本機實測是
+接著在 Codex CLI 用 `/hooks` 檢查並信任兩個定義，再開一個全新 task：先重驗
+opaque ID，再做一次 harmless tool call，確認 `_snapshots/events` 出現新的 manifest。
+Codex CLI 0.146.0 的先前本機實測是
 plugin MCP/skill 會載入、plugin-bundled hook 卻未執行；這個顯式 installer
 就是相容層，並會保留既有 hooks 與 hash-addressed backup。安裝、catalog
 discovery 或 tool call 顯示 `started` 都不等於實際執行完成。
@@ -111,9 +112,13 @@ Codex 的 personal config、project config 與命令列 override 有明確優先
 
 架構與 threat model 見 [docs/architecture.md](docs/architecture.md)，每週同步契約見 [docs/weekly-sync.md](docs/weekly-sync.md)。
 
-## Context Canvas 的取捨
+## Context Canvas 的分層
 
-Hermes 版 autopilot 會在 agent process 內挑選 tool result 留存。Codex 版沒有照搬：`PostToolUse` 會接觸 tool input/output，而且 command hook 會替每次符合的 tool call 多啟一個行程。這裡改採明確 checkpoint、只存 pointer＋SHA-256，重複操作走長駐 stdio MCP server。一次 Windows/Python 3.13.5 的 13-node 量測為 MCP read p50 6.719 ms、p95 8.569 ms；冷啟 CLI read p50 626.397 ms。這是可重跑的開發機快照，不是通用延遲保證。
+新版不把「保存完整 tool result」和「建立 semantic node」綁在一起。對 Codex 實際送出的、已 opt-in `PostToolUse` callback payload，會保存 hook 收到的完整 model-facing payload（依宣告 policy sanitization，超過上限則整筆跳過而不截斷），以 SHA-256＋deterministic gzip 做 dedupe。Sanitizer 會用同一套 suffix-aware 規則處理 structured key、文字 assignment、percent/form query key、bracket/index notation、JSON Unicode escape 與 escaped wrapper；任何 malformed-percent assignment key 都採保守遮罩，而且前面已找到一個值也不會停止後續 encoded／escaped representation passes，但仍保留相鄰的安全 query parameters。支援的 base64／percent-encoded textual data URL（含未加引號的 MIME parameters）會 canonicalize、decode、redact；不能安全解析的 `data:` 會讓整筆 observation 不落盤。其他圖片、影音與任意 binary 會原樣保存並明示標成 `opaque-uninspected`，不是已掃過 secret 的 sealed raw evidence。一般 snapshot 預設 14 天 TTL，GC 會重算 journal plan ID、驗證唯一且有序的 event/object/blob identities，再從目前已驗證狀態決定中斷後剩餘工作；被 finding／decision／verification 引用時，會先驗證所有 transitive blobs 再 pin。Snapshot body 不進 Canvas search、resume injection、closeout 或 MCP 回應，完整回查只能用明示 CLI export。
+
+目前 Codex 會在支援的 handler 回傳已 opt-in post-tool payload 時呼叫 `PostToolUse`；Bash 即使 non-zero exit 仍可能有 callback 與 exit metadata 可保存。若 dispatch／handler failure 沒產生 callback payload，就不會進 archive，而且此 adapter 沒有另一個 failure sibling 可補抓。安裝後應在全新 task 做 harmless tool call，實際檢查新 manifest；不能只看 plugin catalog 或設定檔就推論 capture 已生效。
+
+repo 內附 machine-readable benchmark，涵蓋 persistent MCP read、fresh CLI、首次 snapshot write、warm dedupe、manifest read、exact GC preview，以及 cold small／large `PostToolUse` hook。GC 會驗證 event/object/blob graph 並找出 orphan，不能拿只計數的舊 preview 直接相比；數字也會受 Python、ACL、儲存、防毒、同機負載與 payload shape 影響。比較或發布結果時，必須連同同一 receipt 的 executable hashes 與環境一起看。
 
 非互動 CLI 若採 `approval_policy = "never"`，需要核准的 MCP call 會被取消，
 不是自動放行。驗收時必須明確設定已審過的 plugin-scoped MCP approval

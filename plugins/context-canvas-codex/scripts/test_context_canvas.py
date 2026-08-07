@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import ast
+import base64
+import hashlib
 import importlib.util
 import json
 import os
@@ -8,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -463,9 +466,9 @@ class ContextCanvasTests(unittest.TestCase):
         )
         self.assertFalse(self.root.exists())
 
-    def test_plugin_exposes_session_restore_and_bundled_mcp_without_tool_capture(self) -> None:
+    def test_plugin_exposes_session_restore_post_tool_capture_and_bundled_mcp(self) -> None:
         payload = json.loads((PLUGIN_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(payload["hooks"]), {"SessionStart"})
+        self.assertEqual(set(payload["hooks"]), {"SessionStart", "PostToolUse"})
         group = payload["hooks"]["SessionStart"]
         self.assertEqual(len(group), 1)
         self.assertEqual(group[0]["matcher"], "^(startup|resume|clear|compact)$")
@@ -476,6 +479,13 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn(" -I ", handler["command"])
         self.assertIn(" -I ", handler["commandWindows"])
         self.assertEqual(handler["additionalContextLimit"], 5000)
+        capture_group = payload["hooks"]["PostToolUse"]
+        self.assertEqual(len(capture_group), 1)
+        self.assertEqual(capture_group[0]["matcher"], ".*")
+        capture_handler = capture_group[0]["hooks"][0]
+        self.assertIn("hook-post-tool-use", capture_handler["command"])
+        self.assertIn("hook-post-tool-use", capture_handler["commandWindows"])
+        self.assertNotIn("additionalContextLimit", capture_handler)
         mcp_config = json.loads((PLUGIN_ROOT / ".mcp.json").read_text(encoding="utf-8"))
         server = mcp_config["mcpServers"]["context-canvas"]
         self.assertEqual(server["command"], "python")
@@ -546,7 +556,107 @@ class ContextCanvasTests(unittest.TestCase):
             (pristine_home / "hooks.json").read_text(encoding="utf-8")
         )
         self.assertEqual(len(pristine_hooks["hooks"]["SessionStart"]), 1)
+        self.assertEqual(len(pristine_hooks["hooks"]["PostToolUse"]), 1)
         run("uninstall", home=pristine_home)
+
+        interrupted_home = self.base / "interrupted-codex-home"
+        interrupted_dir = interrupted_home / "context-canvas-codex"
+        interrupted_dir.mkdir(parents=True)
+        interrupted_script = interrupted_dir / "context_canvas.py"
+        interrupted_script.write_bytes(SCRIPT.read_bytes())
+        _, recovered = run("install", home=interrupted_home)
+        self.assertTrue(recovered["ok"])
+        self.assertTrue(recovered["changed"])
+        _, recovered_check = run("check", home=interrupted_home)
+        self.assertTrue(recovered_check["ok"])
+
+        foreign_interrupted_home = self.base / "foreign-interrupted-codex-home"
+        foreign_interrupted_dir = foreign_interrupted_home / "context-canvas-codex"
+        foreign_interrupted_dir.mkdir(parents=True)
+        foreign_interrupted_script = foreign_interrupted_dir / "context_canvas.py"
+        foreign_interrupted_script.write_text("foreign bytes", encoding="utf-8")
+        run("install", expected=1, home=foreign_interrupted_home)
+        self.assertEqual(
+            foreign_interrupted_script.read_text(encoding="utf-8"), "foreign bytes"
+        )
+
+        legacy_home = self.base / "legacy-codex-home"
+        run("install", home=legacy_home)
+        legacy_hooks_path = legacy_home / "hooks.json"
+        legacy_hooks = json.loads(legacy_hooks_path.read_text(encoding="utf-8"))
+        legacy_hooks["hooks"]["PostToolUse"] = []
+        legacy_hooks_path.write_text(json.dumps(legacy_hooks), encoding="utf-8")
+        legacy_manifest_path = (
+            legacy_home / "context-canvas-codex" / "hook-install.json"
+        )
+        current_manifest = json.loads(legacy_manifest_path.read_text(encoding="utf-8"))
+        legacy_manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema": "context-canvas-codex-hook-install.v1",
+                    "source_sha256": current_manifest["source_sha256"],
+                    "installed_sha256": current_manifest["installed_sha256"],
+                    "handler_sha256": hashlib.sha256(
+                        (
+                            json.dumps(
+                                legacy_hooks["hooks"]["SessionStart"][0],
+                                ensure_ascii=False,
+                                indent=2,
+                                sort_keys=True,
+                            )
+                            + "\n"
+                        ).encode("utf-8")
+                    ).hexdigest(),
+                    "hooks_file": "hooks.json",
+                    "installed_script": "context-canvas-codex/context_canvas.py",
+                }
+            ),
+            encoding="utf-8",
+        )
+        _, migrated = run("install", home=legacy_home)
+        self.assertTrue(migrated["changed"])
+        migrated_manifest = json.loads(
+            legacy_manifest_path.read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            migrated_manifest["schema"], "context-canvas-codex-hook-install.v2"
+        )
+        self.assertTrue(run("check", home=legacy_home)[1]["ok"])
+
+        bad_legacy_home = self.base / "bad-legacy-codex-home"
+        run("install", home=bad_legacy_home)
+        bad_legacy_hooks_path = bad_legacy_home / "hooks.json"
+        bad_legacy_hooks = json.loads(
+            bad_legacy_hooks_path.read_text(encoding="utf-8")
+        )
+        bad_legacy_hooks["hooks"]["PostToolUse"] = []
+        bad_legacy_hooks_path.write_text(
+            json.dumps(bad_legacy_hooks), encoding="utf-8"
+        )
+        bad_legacy_manifest_path = (
+            bad_legacy_home / "context-canvas-codex" / "hook-install.json"
+        )
+        bad_current_manifest = json.loads(
+            bad_legacy_manifest_path.read_text(encoding="utf-8")
+        )
+        bad_legacy_manifest_path.write_text(
+            json.dumps(
+                {
+                    "schema": "context-canvas-codex-hook-install.v1",
+                    "source_sha256": bad_current_manifest["source_sha256"],
+                    "installed_sha256": bad_current_manifest["installed_sha256"],
+                    "handler_sha256": "0" * 64,
+                    "hooks_file": "hooks.json",
+                    "installed_script": "context-canvas-codex/context_canvas.py",
+                }
+            ),
+            encoding="utf-8",
+        )
+        run("install", expected=1, home=bad_legacy_home)
+        self.assertEqual(
+            json.loads(bad_legacy_manifest_path.read_text(encoding="utf-8"))["schema"],
+            "context-canvas-codex-hook-install.v1",
+        )
 
         _, installed = run("install")
         self.assertTrue(installed["ok"])
@@ -556,6 +666,7 @@ class ContextCanvasTests(unittest.TestCase):
         hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
         self.assertEqual(hooks["hooks"]["SessionStart"][0], existing_group)
         self.assertEqual(len(hooks["hooks"]["SessionStart"]), 2)
+        self.assertEqual(len(hooks["hooks"]["PostToolUse"]), 1)
         handler = hooks["hooks"]["SessionStart"][1]["hooks"][0]
         canonical_script = codex_home.resolve(strict=False) / "context-canvas-codex" / "context_canvas.py"
         self.assertIn(str(canonical_script), handler["commandWindows"])
@@ -570,6 +681,8 @@ class ContextCanvasTests(unittest.TestCase):
         _, drifted = run("check", expected=1)
         self.assertFalse(drifted["ok"])
         self.assertIn("drift", " ".join(drifted["errors"]).lower())
+        run("uninstall", expected=1)
+        self.assertTrue(installed_script.exists())
         run("install")
 
         _, removed = run("uninstall")
@@ -577,6 +690,7 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertTrue(removed["changed"])
         hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
         self.assertEqual(hooks["hooks"]["SessionStart"], [existing_group])
+        self.assertEqual(hooks["hooks"]["PostToolUse"], [])
         self.assertFalse(installed_script.exists())
 
     def test_user_hook_installer_rejects_aliased_install_directory(self) -> None:
@@ -822,6 +936,21 @@ class ContextCanvasTests(unittest.TestCase):
 
     def test_mcp_stdio_server_exposes_pointer_only_canvas_tools(self) -> None:
         self.assertTrue(MCP_SCRIPT.is_file())
+        captured = canvas.SnapshotStore(root=self.root).capture_post_tool_use(
+            {
+                "session_id": self.session_id,
+                "turn_id": "turn-mcp-snapshot",
+                "transcript_path": None,
+                "cwd": str(self.base),
+                "hook_event_name": "PostToolUse",
+                "model": "gpt-5.6-sol",
+                "permission_mode": "default",
+                "tool_name": "mcp__web__open",
+                "tool_use_id": "call-mcp-snapshot",
+                "tool_input": {"url": "https://example.invalid/mcp-snapshot"},
+                "tool_response": {"text": "MCP must not return this snapshot body"},
+            }
+        )
         process = subprocess.Popen(
             [sys.executable, "-B", "-I", str(MCP_SCRIPT)],
             stdin=subprocess.PIPE,
@@ -876,7 +1005,17 @@ class ContextCanvasTests(unittest.TestCase):
             listed = request({"jsonrpc": "2.0", "id": 4, "method": "tools/list", "params": {}})
             names = {item["name"] for item in listed["result"]["tools"]}
             self.assertTrue(
-                {"canvas_start", "canvas_upsert_node", "canvas_read", "canvas_search", "canvas_closeout"}
+                {
+                    "canvas_start",
+                    "canvas_upsert_node",
+                    "canvas_read",
+                    "canvas_search",
+                    "canvas_closeout",
+                    "snapshot_list",
+                    "snapshot_read",
+                    "snapshot_pin",
+                    "snapshot_gc",
+                }
                 <= names
             )
 
@@ -907,6 +1046,65 @@ class ContextCanvasTests(unittest.TestCase):
                 }
             )
             self.assertFalse(read["result"]["structuredContent"]["raw_evidence_supported"])
+
+            snapshot_list = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 7,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "snapshot_list",
+                        "arguments": {"canvas_id": self.canvas_id, "limit": 10},
+                    },
+                }
+            )
+            listed_snapshot = snapshot_list["result"]["structuredContent"]["events"][0]
+            self.assertEqual(listed_snapshot["event_id"], captured["event_id"])
+            self.assertNotIn("payload", listed_snapshot)
+            snapshot_read = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 8,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "snapshot_read",
+                        "arguments": {
+                            "canvas_id": self.canvas_id,
+                            "event_id": captured["event_id"],
+                        },
+                    },
+                }
+            )
+            manifest_result = snapshot_read["result"]["structuredContent"]
+            self.assertNotIn("payload", manifest_result)
+            self.assertNotIn(
+                "MCP must not return this snapshot body",
+                json.dumps(manifest_result, ensure_ascii=False),
+            )
+            snapshot_pin = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 9,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "snapshot_pin",
+                        "arguments": {
+                            "sha256": captured["sha256"],
+                            "reason": "MCP bounded pin smoke",
+                        },
+                    },
+                }
+            )
+            self.assertTrue(snapshot_pin["result"]["structuredContent"]["pinned"])
+            snapshot_gc = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 10,
+                    "method": "tools/call",
+                    "params": {"name": "snapshot_gc", "arguments": {}},
+                }
+            )
+            self.assertFalse(snapshot_gc["result"]["structuredContent"]["apply"])
         finally:
             if process.stdin is not None:
                 process.stdin.close()
@@ -918,6 +1116,1271 @@ class ContextCanvasTests(unittest.TestCase):
                 process.stderr.close()
             if process.returncode != 0:
                 self.fail(f"MCP server exited {process.returncode}: {stderr}")
+
+
+class ContextCanvasSnapshotTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory(prefix="context-canvas-snapshot-test-")
+        self.base = Path(self.temp.name)
+        self.root = self.base / "data"
+        self.environment = mock.patch.dict(
+            os.environ,
+            {
+                canvas.TEST_MODE_ENV: "1",
+                canvas.TEST_ROOT_ENV: str(self.root),
+            },
+            clear=False,
+        )
+        self.environment.start()
+        self.session_id = "thread-snapshot-alpha"
+        self.canvas_id = canvas.derive_canvas_id(self.session_id)
+        self.snapshots = (
+            canvas.SnapshotStore(root=self.root) if hasattr(canvas, "SnapshotStore") else None
+        )
+
+    def tearDown(self) -> None:
+        self.environment.stop()
+        self.temp.cleanup()
+
+    def hook_payload(
+        self,
+        *,
+        tool_use_id: str = "call-001",
+        tool_name: str = "mcp__web__open",
+        response: object | None = None,
+    ) -> dict:
+        return {
+            "session_id": self.session_id,
+            "turn_id": "turn-001",
+            "transcript_path": None,
+            "cwd": str(self.base),
+            "hook_event_name": "PostToolUse",
+            "model": "gpt-5.6-sol",
+            "permission_mode": "default",
+            "tool_name": tool_name,
+            "tool_use_id": tool_use_id,
+            "tool_input": {"url": "https://example.invalid/snapshot"},
+            "tool_response": response
+            if response is not None
+            else {"status": 200, "text": "完整歷史資料"},
+        }
+
+    def test_snapshot_codec_redacts_recursively_and_round_trips_data_urls(self) -> None:
+        sensitive_value = "CODEC_" + "SECRET_123456789"
+        binary = b"\x00codec-blob\xff"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(binary).decode(
+            "ascii"
+        )
+        sanitized, redactions, blobs = canvas._sanitize_snapshot_payload(
+            {
+                "author" + "ization": "Bearer " + sensitive_value,
+                "nested": ["Bearer " + sensitive_value, {"image": data_url}],
+            }
+        )
+        self.assertEqual(redactions, 2)
+        self.assertNotIn(sensitive_value, json.dumps(sanitized, ensure_ascii=False))
+        self.assertEqual(len(blobs), 1)
+        digest, blob = next(iter(blobs.items()))
+        self.assertEqual(digest, canvas.hashlib.sha256(binary).hexdigest())
+        self.assertEqual(blob["media_type"], "application/octet-stream")
+        self.assertEqual(blob["bytes"], binary)
+        self.assertEqual(blob["content_policy"], "opaque-uninspected")
+        rehydrated = canvas._rehydrate_snapshot_payload(
+            sanitized, lambda requested: blobs[requested]["bytes"]
+        )
+        self.assertEqual(rehydrated["nested"][1]["image"], data_url)
+        uppercase_reference = json.loads(json.dumps(sanitized))
+        uppercase_reference["nested"][1]["image"]["$snapshot_blob"]["sha256"] = (
+            digest.upper()
+        )
+        with self.assertRaises(canvas.CanvasError):
+            canvas._rehydrate_snapshot_payload(
+                uppercase_reference, lambda requested: blobs[requested]["bytes"]
+            )
+        with self.assertRaises(canvas.CorruptCanvasError):
+            canvas.SnapshotStore._blob_descriptors(uppercase_reference)
+        first = canvas._canonical_snapshot_bytes(sanitized)
+        second = canvas._canonical_snapshot_bytes(dict(reversed(list(sanitized.items()))))
+        self.assertEqual(first, second)
+
+    def test_textual_data_url_is_redacted_before_blob_persistence(self) -> None:
+        sensitive_value = "DATA_URL_" + "TOKEN_123456789"
+        raw_text = "api" + "_key=" + sensitive_value
+        quoted_json = json.dumps(
+            {
+                "api" + "_key": sensitive_value,
+                "author" + "ization": "Bearer " + sensitive_value,
+            },
+            separators=(",", ":"),
+        )
+        fixtures = [
+            "data:text/plain;charset=utf-8;base64,"
+            + base64.b64encode(raw_text.encode("utf-8")).decode("ascii"),
+            "data:application/json;charset=utf-8,"
+            + "api_key%3D"
+            + sensitive_value,
+            "data:application/json;charset=utf-8,"
+            + canvas._percent_encode_parameter(quoted_json),
+        ]
+
+        for index, data_url in enumerate(fixtures):
+            with self.subTest(index=index):
+                captured = self.snapshots.capture_post_tool_use(
+                    self.hook_payload(
+                        tool_use_id=f"call-text-data-{index}",
+                        response={"attachment": data_url},
+                    )
+                )
+                event = self.snapshots.read_event(
+                    self.canvas_id, captured["event_id"], include_payload=True
+                )
+                self.assertGreaterEqual(event["manifest"]["redaction_count"], 1)
+                descriptor = event["manifest"]["blobs"][0]
+                self.assertEqual(descriptor["content_policy"], "text-redacted")
+                blob_path = next(
+                    path
+                    for path in (self.root / "_snapshots" / "blobs" / "sha256").rglob(
+                        f"{descriptor['sha256']}.bin.gz"
+                    )
+                )
+                blob_bytes = canvas._read_gzip_bounded(
+                    blob_path,
+                    maximum_bytes=canvas.MAX_SNAPSHOT_OBJECT_BYTES,
+                    label="test snapshot blob",
+                )
+                self.assertNotIn(sensitive_value.encode("utf-8"), blob_bytes)
+                self.assertIn(b"[REDACTED]", blob_bytes)
+                restored = event["payload"]["tool_response"]["attachment"]
+                self.assertIn(";charset=utf-8;base64,", restored)
+                decoded = base64.b64decode(restored.split(",", 1)[1])
+                self.assertNotIn(sensitive_value.encode("utf-8"), decoded)
+                self.assertIn(b"[REDACTED]", decoded)
+                export_path = self.base / f"text-data-{index}.json"
+                self.snapshots.export_event(
+                    self.canvas_id, captured["event_id"], output_path=export_path
+                )
+                self.assertNotIn(
+                    sensitive_value.encode("utf-8"), export_path.read_bytes()
+                )
+
+    def test_quoted_text_secret_assignments_are_redacted_before_storage(self) -> None:
+        sensitive_value = "QUOTED_" + "TOKEN_123456789"
+        quoted_json = json.dumps(
+            {
+                "api" + "_key": sensitive_value,
+                "pass" + "word": "escaped-quote-\\\"-" + sensitive_value,
+            },
+            separators=(",", ":"),
+        )
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-quoted-secret",
+                response={"text": quoted_json},
+            )
+        )
+        event = self.snapshots.read_event(
+            self.canvas_id, captured["event_id"], include_payload=True
+        )
+        self.assertGreaterEqual(event["manifest"]["redaction_count"], 2)
+        self.assertNotIn(
+            sensitive_value,
+            event["payload"]["tool_response"]["text"],
+        )
+        export_path = self.base / "quoted-secret.json"
+        self.snapshots.export_event(
+            self.canvas_id, captured["event_id"], output_path=export_path
+        )
+        self.assertNotIn(sensitive_value.encode("utf-8"), export_path.read_bytes())
+        for path in self.root.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(sensitive_value.encode("utf-8"), path.read_bytes())
+
+    def test_suffix_qualified_text_keys_share_structured_secret_classifier(self) -> None:
+        sensitive_value = "SUFFIX_" + "TOKEN_123456789"
+        protected_keys = [
+            "my_api_key",
+            "database-password",
+            "serviceAccessToken",
+            "session.cookie",
+            "custom-secret",
+            "tenant/privateKey",
+            "legacyPwd",
+            "proxyAuthorization",
+        ]
+        self.assertTrue(all(canvas._snapshot_secret_key(key) for key in protected_keys))
+        quoted_text = json.dumps(
+            {key: sensitive_value for key in protected_keys},
+            separators=(",", ":"),
+        )
+        data_url = (
+            "data:application/json;charset=utf-8,"
+            + canvas._percent_encode_parameter(quoted_text)
+        )
+        semantic_encodings = [
+            "service%5Faccess%5Ftoken" + "=" + sensitive_value,
+            "access_token[]" + "=" + sensitive_value,
+            '{"api\\u005fkey":"' + sensitive_value + '"}',
+            '{\\"database_password\\":\\"' + sensitive_value + '\\"}',
+            "service%5Faccess%5Ftoken%3D" + sensitive_value,
+        ]
+        payload = self.hook_payload(
+            tool_use_id="call-suffix-keys",
+            response={
+                "text": quoted_text,
+                "attachment": data_url,
+                "semantic_encodings": semantic_encodings,
+            },
+        )
+        payload["tool_input"] = {
+            "url": (
+                "https://example.invalid/?foo=bar&service%5Faccess%5Ftoken"
+                + "="
+                + sensitive_value
+            )
+        }
+        captured = self.snapshots.capture_post_tool_use(payload)
+        event = self.snapshots.read_event(
+            self.canvas_id, captured["event_id"], include_payload=True
+        )
+        self.assertNotIn(
+            sensitive_value,
+            json.dumps(event["payload"], ensure_ascii=False),
+        )
+        self.assertNotIn(sensitive_value, event["manifest"]["source_identity"])
+        export_path = self.base / "suffix-qualified-secret.json"
+        self.snapshots.export_event(
+            self.canvas_id, captured["event_id"], output_path=export_path
+        )
+        self.assertNotIn(sensitive_value.encode("utf-8"), export_path.read_bytes())
+        for path in self.root.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(sensitive_value.encode("utf-8"), path.read_bytes())
+
+    def test_semantic_key_encodings_never_persist_across_capture_export_and_gc(self) -> None:
+        sensitive_value = "SEMANTIC_" + "SECRET_123456789"
+        secondary_value = "SECONDARY_" + "SECRET_987654321"
+        encoded_keys = [
+            "database%2Dpassword",
+            "service%5Faccess%5Ftoken",
+            "service%5faccess%5ftoken",
+            "service+access+token",
+            "access_token[]",
+            "headers[api_key]",
+            "credentials[password]",
+            "tokens[0][access_token]",
+            "token[0]",
+            "authorization[1]",
+            "password[0]",
+            "access_token%3X",
+            "api%ZZkey",
+            "pass%Gword",
+            "private%key",
+            "authori%ZZzation",
+            "coo%ZZkie",
+        ]
+        query = "&".join(
+            [
+                "safe_neighbor=SAFE_QUERY_VALUE",
+                *[key + "=" + sensitive_value for key in encoded_keys],
+                "public_tokenizer=SAFE_TOKENIZER_VALUE",
+            ]
+        )
+        unicode_escaped_json = (
+            '{"api\\u005fkey":' + json.dumps(sensitive_value) + "}"
+        )
+        escaped_wrapper = json.dumps(
+            {"database_password": sensitive_value}, separators=(",", ":")
+        ).replace('"', '\\"')
+        bracket_assignment = "headers[api_key]" + "=" + sensitive_value
+        mixed_assignment = (
+            "api_key"
+            + "="
+            + sensitive_value
+            + ";service%5Faccess%5Ftoken%3D"
+            + secondary_value
+        )
+        mixed_bearer = (
+            "Bearer FIXTUREVALUE123 "
+            + "service%5Faccess%5Ftoken%3D"
+            + secondary_value
+        )
+        stray_percent_mixed = (
+            "discount 50% service%5Faccess%5Ftoken%3D" + secondary_value
+        )
+        invalid_byte_percent_mixed = (
+            "opaque%FF service%5Faccess%5Ftoken%3D" + secondary_value
+        )
+        double_encoded_mixed = (
+            "service%255Faccess%255Ftoken%253D" + secondary_value
+        )
+        semantic_values = [
+            key + "=" + sensitive_value for key in encoded_keys
+        ] + [
+            unicode_escaped_json,
+            escaped_wrapper,
+            bracket_assignment,
+            mixed_assignment,
+            mixed_bearer,
+            stray_percent_mixed,
+            invalid_byte_percent_mixed,
+            double_encoded_mixed,
+        ]
+        data_urls = [
+            "data:application/json;charset=utf-8,"
+            + canvas._percent_encode_parameter(unicode_escaped_json),
+            "data:text/plain;charset=utf-8;base64,"
+            + base64.b64encode(escaped_wrapper.encode("utf-8")).decode("ascii"),
+            "data:text/plain;charset=utf-8;base64,"
+            + base64.b64encode(bracket_assignment.encode("utf-8")).decode("ascii"),
+            "data:text/plain;charset=utf-8;base64,"
+            + base64.b64encode(mixed_bearer.encode("utf-8")).decode("ascii"),
+            "data:text/plain;charset=utf-8;base64,"
+            + base64.b64encode(stray_percent_mixed.encode("utf-8")).decode("ascii"),
+        ]
+        payload = self.hook_payload(
+            tool_use_id="call-semantic-key-encodings",
+            response={
+                "semantic_values": semantic_values,
+                "attachments": data_urls,
+                "structured_keys": {
+                    ("api" + "%5F" + "key"): sensitive_value,
+                    ("api" + "%ZZ" + "key"): sensitive_value,
+                    ("token" + "[0]"): secondary_value,
+                },
+            },
+        )
+        payload["tool_input"] = {"url": "https://example.invalid/?" + query}
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        captured = self.snapshots.capture_post_tool_use(
+            payload, retention_days=1, now=captured_at
+        )
+        event = self.snapshots.read_event(
+            self.canvas_id, captured["event_id"], include_payload=True
+        )
+        serialized = json.dumps(event, ensure_ascii=False).encode("utf-8")
+        for forbidden in (sensitive_value, secondary_value):
+            self.assertNotIn(forbidden.encode("utf-8"), serialized)
+        sanitized_url = event["payload"]["tool_input"]["url"]
+        self.assertIn("safe_neighbor=SAFE_QUERY_VALUE", sanitized_url)
+        self.assertIn("public_tokenizer=SAFE_TOKENIZER_VALUE", sanitized_url)
+        self.assertNotIn(sensitive_value, event["manifest"]["source_identity"])
+
+        export_path = self.base / "semantic-key-encodings.json"
+        self.snapshots.export_event(
+            self.canvas_id, captured["event_id"], output_path=export_path
+        )
+        for forbidden in (sensitive_value, secondary_value):
+            self.assertNotIn(forbidden.encode("utf-8"), export_path.read_bytes())
+        preview = self.snapshots.gc(
+            now=captured_at + timedelta(days=2), apply=False
+        )
+        self.assertIn(
+            {"canvas_id": self.canvas_id, "event_id": captured["event_id"]},
+            preview["candidate_events"],
+        )
+        for path in self.root.rglob("*"):
+            if not path.is_file():
+                continue
+            content = path.read_bytes()
+            if path.suffix == ".gz":
+                content = canvas.gzip.decompress(content)
+            for forbidden in (sensitive_value, secondary_value):
+                self.assertNotIn(forbidden.encode("utf-8"), content, str(path))
+
+    def test_semantic_key_encoding_controls_preserve_safe_neighbors(self) -> None:
+        controls = [
+            "https://example.invalid/?safe_neighbor=SAFE&public_tokenizer=VALUE",
+            "headers[accessibility]" + "=" + "public",
+            "monkey" + "=" + "banana",
+            json.dumps({"api_version": "v1", "tokenizer": "public"}),
+        ]
+        for control in controls:
+            with self.subTest(control=control):
+                self.assertEqual(canvas._redact_snapshot_text(control), (control, 0))
+
+    def test_representation_fixed_point_survives_unrelated_percent_text(self) -> None:
+        protected_value = "FIXED_POINT_" + "SECRET_123456789"
+        fixtures = [
+            "discount 50% service%5Faccess%5Ftoken%3D" + protected_value,
+            "opaque%FF service%5Faccess%5Ftoken%3D" + protected_value,
+            "service%255Faccess%255Ftoken%253D" + protected_value,
+        ]
+        for fixture in fixtures:
+            with self.subTest(fixture=fixture):
+                redacted, redaction_count = canvas._redact_snapshot_text(fixture)
+                self.assertGreaterEqual(redaction_count, 1)
+                self.assertNotIn(protected_value, redacted)
+
+        for key in ("api%5Fkey", "api%ZZkey", "token[0]", "authorization[1]"):
+            with self.subTest(key=key):
+                sanitized, redaction_count, blobs = canvas._sanitize_snapshot_payload(
+                    {key: protected_value}
+                )
+                self.assertEqual(sanitized[key], "[REDACTED]")
+                self.assertEqual(redaction_count, 1)
+                self.assertEqual(blobs, {})
+
+    def test_redacted_mime_parameters_round_trip_and_do_not_poison_gc(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        named_secret = "MIME_" + "TOKEN_123456789"
+        patterned_secret = "github" + "_pat_" + "FIXTURETOKEN123456789"
+        prefixed_secret = "ghp" + "_FIXTURETOKEN123456789"
+        suffixed_secret = "sk" + "-FIXTURETOKEN123456789"
+        embedded_secret = "xoxb" + "-FIXTURETOKEN123456789"
+        fixtures = [
+            (
+                named_secret,
+                "data:text/plain;"
+                + ("api" + "_key")
+                + "="
+                + named_secret
+                + ",hello",
+            ),
+            (
+                patterned_secret,
+                "data:text/plain;label=" + patterned_secret + ",hello",
+            ),
+            (
+                prefixed_secret,
+                "data:text/plain;label=x-" + prefixed_secret + ",hello",
+            ),
+            (
+                suffixed_secret,
+                "data:text/plain;label=" + suffixed_secret + ".suffix,hello",
+            ),
+            (
+                embedded_secret,
+                "data:text/plain;label=prefix-"
+                + embedded_secret
+                + ".tail,hello",
+            ),
+        ]
+        captured_events: list[dict] = []
+        for index, (secret, data_url) in enumerate(fixtures):
+            with self.subTest(index=index):
+                captured = self.snapshots.capture_post_tool_use(
+                    self.hook_payload(
+                        tool_use_id=f"call-mime-redaction-{index}",
+                        response={"attachment": data_url},
+                    ),
+                    retention_days=1,
+                    now=captured_at,
+                )
+                captured_events.append(captured)
+                event = self.snapshots.read_event(
+                    self.canvas_id, captured["event_id"], include_payload=True
+                )
+                self.assertGreaterEqual(event["manifest"]["redaction_count"], 1)
+                descriptor = event["manifest"]["blobs"][0]
+                self.assertIn("=%5BREDACTED%5D", descriptor["media_type"])
+                restored = event["payload"]["tool_response"]["attachment"]
+                self.assertIn("=%5BREDACTED%5D;base64,", restored)
+                self.assertNotIn(secret, restored)
+                export_path = self.base / f"mime-redaction-{index}.json"
+                self.snapshots.export_event(
+                    self.canvas_id, captured["event_id"], output_path=export_path
+                )
+                self.assertNotIn(secret.encode("utf-8"), export_path.read_bytes())
+
+        preview = self.snapshots.gc(
+            now=captured_at + timedelta(days=2), apply=False
+        )
+        self.assertEqual(preview["candidate_event_count"], len(captured_events))
+        self.assertEqual(
+            {item["event_id"] for item in preview["candidate_events"]},
+            {item["event_id"] for item in captured_events},
+        )
+        for path in self.root.rglob("*"):
+            if path.is_file():
+                for secret, _ in fixtures:
+                    self.assertNotIn(secret.encode("utf-8"), path.read_bytes())
+
+    def test_malformed_or_unsupported_data_url_aborts_whole_capture(self) -> None:
+        fixtures = [
+            "data:text/plain;charset=\"utf-8\",secret",
+            "data:text/plain;base64;charset=utf-8,c2VjcmV0",
+            "data:text/plain,secret%ZZ",
+            "data:;base64,%%%",
+        ]
+        for index, data_url in enumerate(fixtures):
+            with self.subTest(index=index):
+                with self.assertRaises(canvas.CanvasError):
+                    self.snapshots.capture_post_tool_use(
+                        self.hook_payload(
+                            tool_use_id=f"call-invalid-data-{index}",
+                            response={"attachment": data_url},
+                        )
+                    )
+        snapshot_root = self.root / "_snapshots"
+        self.assertFalse(
+            snapshot_root.exists()
+            and any(
+                path.is_file()
+                for child in ("events", "objects", "blobs")
+                for path in (snapshot_root / child).rglob("*")
+            )
+        )
+
+    def test_full_sanitized_round_trip_extracts_blob_and_never_persists_secret(self) -> None:
+        sensitive_value = "TEST_" + "TOKEN_DO_NOT_STORE_123456789"
+        binary = b"\x00snapshot-image\xff"
+        data_url = "data:image/png;base64," + base64.b64encode(binary).decode("ascii")
+        payload = self.hook_payload(
+            response={
+                "text": "完整歷史資料",
+                "author" + "ization": "Bearer " + sensitive_value,
+                "nested": [data_url, {"pass" + "word": sensitive_value}],
+            }
+        )
+        captured = self.snapshots.capture_post_tool_use(payload)
+
+        self.assertEqual(captured["capture_status"], "stored")
+        self.assertRegex(captured["snapshot_uri"], r"^snapshot://sha256/[0-9a-f]{64}$")
+        event = self.snapshots.read_event(
+            self.canvas_id, captured["event_id"], include_payload=True
+        )
+        self.assertFalse(event["manifest"]["truncated"])
+        self.assertEqual(event["manifest"]["fidelity"], "codex-post-tool-use-model-facing")
+        self.assertEqual(
+            event["manifest"]["sensitivity_class"], "sanitized-with-opaque-media"
+        )
+        self.assertGreaterEqual(event["manifest"]["redaction_count"], 2)
+        self.assertEqual(event["payload"]["tool_response"]["text"], "完整歷史資料")
+        self.assertEqual(event["payload"]["tool_response"]["nested"][0], data_url)
+        exported_path = self.base / "exported-snapshot.json"
+        exported = self.snapshots.export_event(
+            self.canvas_id, captured["event_id"], output_path=exported_path
+        )
+        self.assertEqual(Path(exported["output_path"]), exported_path)
+        exported_payload = json.loads(exported_path.read_text(encoding="utf-8"))
+        self.assertEqual(exported_payload["tool_response"]["nested"][0], data_url)
+        self.assertNotIn(sensitive_value, exported_path.read_text(encoding="utf-8"))
+        cli_export_path = self.base / "cli-exported-snapshot.json"
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-I",
+                str(SCRIPT),
+                "snapshot-export",
+                "--canvas-id",
+                self.canvas_id,
+                "--event-id",
+                captured["event_id"],
+                "--output",
+                str(cli_export_path),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0)
+            if os.name == "nt"
+            else 0,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(
+            json.loads(cli_export_path.read_text(encoding="utf-8")), exported_payload
+        )
+        for path in self.root.rglob("*"):
+            if path.is_file():
+                self.assertNotIn(sensitive_value.encode("utf-8"), path.read_bytes(), path)
+
+    def test_content_addressed_dedupe_and_event_idempotency(self) -> None:
+        first_payload = self.hook_payload(response={"text": "same result"})
+        first = self.snapshots.capture_post_tool_use(first_payload)
+        repeated = self.snapshots.capture_post_tool_use(first_payload)
+        second_payload = self.hook_payload(
+            tool_use_id="call-002", response={"text": "same result"}
+        )
+        second = self.snapshots.capture_post_tool_use(second_payload)
+
+        self.assertEqual(first["event_id"], repeated["event_id"])
+        self.assertEqual(first["sha256"], repeated["sha256"])
+        self.assertFalse(first["deduplicated"])
+        self.assertTrue(repeated["deduplicated"])
+        self.assertNotEqual(first["event_id"], second["event_id"])
+        self.assertEqual(first["sha256"], second["sha256"])
+        objects = list((self.root / "_snapshots" / "objects" / "sha256").rglob("*.json.gz"))
+        self.assertEqual(len(objects), 1)
+
+    def test_warm_snapshot_capture_revalidates_private_root_acl_once(self) -> None:
+        self.snapshots.capture_post_tool_use(
+            self.hook_payload(tool_use_id="call-acl-prime", response={"text": "prime"})
+        )
+        canvas._ACL_VERIFICATION_CACHE.clear()
+        with mock.patch.object(
+            canvas, "_verify_directory_acl", wraps=canvas._verify_directory_acl
+        ) as verify_acl:
+            self.snapshots.capture_post_tool_use(
+                self.hook_payload(
+                    tool_use_id="call-acl-warm", response={"text": "warm"}
+                )
+            )
+        self.assertEqual(verify_acl.call_count, 1)
+        self.assertEqual(verify_acl.call_args.args[0], self.root)
+
+    def test_context_canvas_tool_capture_is_metadata_only(self) -> None:
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_name="mcp__context-canvas__canvas_read",
+                response={"text": "must not recursively snapshot"},
+            )
+        )
+        self.assertEqual(captured["capture_status"], "metadata_only")
+        self.assertIsNone(captured["sha256"])
+        event = self.snapshots.read_event(self.canvas_id, captured["event_id"])
+        self.assertEqual(event["manifest"]["capture_policy"], "metadata_only_self")
+        self.assertNotIn("payload", event)
+
+    def test_pin_preserves_expired_object_while_gc_removes_unpinned_object(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        pinned_binary = b"pinned-transitive-blob"
+        pinned_data_url = "data:application/octet-stream;base64," + base64.b64encode(
+            pinned_binary
+        ).decode("ascii")
+        pinned = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-pin", response={"attachment": pinned_data_url}
+            ),
+            retention_days=1,
+            now=captured_at,
+        )
+        expired = self.snapshots.capture_post_tool_use(
+            self.hook_payload(tool_use_id="call-expire", response={"text": "expire"}),
+            retention_days=1,
+            now=captured_at,
+        )
+        self.snapshots.pin(
+            pinned["sha256"],
+            canvas_id=self.canvas_id,
+            node_id="N000002",
+            reason="verification evidence",
+        )
+        future = captured_at + timedelta(days=2)
+        preview = self.snapshots.gc(now=future, apply=False)
+        self.assertEqual(preview["candidate_event_count"], 1)
+        self.assertEqual(
+            preview["candidate_events"],
+            [{"canvas_id": self.canvas_id, "event_id": expired["event_id"]}],
+        )
+        self.assertEqual(preview["candidate_objects"], [expired["sha256"]])
+        self.assertTrue(self.snapshots.read_event(self.canvas_id, expired["event_id"]))
+        applied = self.snapshots.gc(now=future, apply=True)
+        self.assertEqual(applied["removed_event_count"], 1)
+        with self.assertRaises(canvas.CanvasError):
+            self.snapshots.read_event(self.canvas_id, expired["event_id"])
+        self.assertTrue(
+            self.snapshots.read_event(self.canvas_id, pinned["event_id"])["manifest"]["pinned"]
+        )
+        pinned_event = self.snapshots.read_event(
+            self.canvas_id, pinned["event_id"], include_payload=True
+        )
+        self.assertEqual(
+            pinned_event["payload"]["tool_response"]["attachment"], pinned_data_url
+        )
+        pinned_blob_digest = hashlib.sha256(pinned_binary).hexdigest()
+        self.assertTrue(
+            any(
+                (self.root / "_snapshots" / "blobs" / "sha256").rglob(
+                    f"{pinned_blob_digest}.bin.gz"
+                )
+            )
+        )
+
+    def test_gc_preflights_corrupt_graph_before_deleting_provenance(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(tool_use_id="call-corrupt-gc", response={"text": "expire"}),
+            retention_days=1,
+            now=captured_at,
+        )
+        event_path = next(
+            (self.root / "_snapshots" / "events" / self.canvas_id).glob("*.json")
+        )
+        object_path = next(
+            (self.root / "_snapshots" / "objects" / "sha256").rglob("*.json.gz")
+        )
+        object_path.write_bytes(b"not-a-gzip-object")
+
+        with self.assertRaises(canvas.CorruptCanvasError):
+            self.snapshots.gc(now=captured_at + timedelta(days=2), apply=True)
+
+        self.assertTrue(event_path.exists())
+        self.assertEqual(event_path.name, f"{captured['event_id']}.json")
+
+    def test_gc_preflights_corrupt_blob_and_event_before_any_delete(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        binary = b"corrupt-gc-blob"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(
+            binary
+        ).decode("ascii")
+        first = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-corrupt-blob",
+                response={"attachment": data_url},
+            ),
+            retention_days=1,
+            now=captured_at,
+        )
+        second = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-other-expired", response={"text": "other"}
+            ),
+            retention_days=1,
+            now=captured_at,
+        )
+        event_root = self.root / "_snapshots" / "events" / self.canvas_id
+        blob_path = next(
+            (self.root / "_snapshots" / "blobs" / "sha256").rglob("*.bin.gz")
+        )
+        original_blob = blob_path.read_bytes()
+        blob_path.write_bytes(b"not-a-gzip-blob")
+        with self.assertRaises(canvas.CorruptCanvasError):
+            self.snapshots.gc(now=captured_at + timedelta(days=2), apply=True)
+        self.assertTrue((event_root / f"{first['event_id']}.json").exists())
+        self.assertTrue((event_root / f"{second['event_id']}.json").exists())
+
+        blob_path.write_bytes(original_blob)
+        corrupt_event = event_root / f"{first['event_id']}.json"
+        corrupt_event.write_text("not-json", encoding="utf-8")
+        with self.assertRaises(canvas.CorruptCanvasError):
+            self.snapshots.gc(now=captured_at + timedelta(days=2), apply=True)
+        self.assertTrue(corrupt_event.exists())
+        self.assertTrue((event_root / f"{second['event_id']}.json").exists())
+
+    def test_gc_sweeps_capture_orphans_and_reports_exact_plan(self) -> None:
+        binary = b"orphan-binary"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(binary).decode(
+            "ascii"
+        )
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-orphan", response={"attachment": data_url}
+            )
+        )
+        event_path = next(
+            (self.root / "_snapshots" / "events" / self.canvas_id).glob("*.json")
+        )
+        event_path.unlink()
+        blob_digest = canvas.hashlib.sha256(binary).hexdigest()
+
+        preview = self.snapshots.gc(apply=False)
+        self.assertEqual(preview["candidate_events"], [])
+        self.assertEqual(preview["candidate_objects"], [captured["sha256"]])
+        self.assertEqual(preview["candidate_blobs"], [blob_digest])
+        applied = self.snapshots.gc(apply=True)
+        self.assertEqual(applied["removed_object_count"], 1)
+        self.assertEqual(applied["removed_blob_count"], 1)
+
+    def test_gc_recovers_pending_plan_after_event_unlink_interruption(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        binary = b"pending-plan-binary"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(
+            binary
+        ).decode("ascii")
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-pending-plan",
+                response={"attachment": data_url},
+            ),
+            retention_days=1,
+            now=captured_at,
+        )
+        future = captured_at + timedelta(days=2)
+        preview = self.snapshots.gc(now=future, apply=False)
+        journal = {
+            "schema": canvas.SNAPSHOT_GC_SCHEMA,
+            "plan_id": preview["plan_id"],
+            "created_at": canvas._snapshot_iso(future),
+            "candidate_events": preview["candidate_events"],
+            "candidate_objects": preview["candidate_objects"],
+            "candidate_blobs": preview["candidate_blobs"],
+        }
+        with self.snapshots._locked(create=True) as snapshot_root:
+            self.assertIsNotNone(snapshot_root)
+            gc_root = self.snapshots._subdirectory(snapshot_root, "gc", create=True)
+            self.assertIsNotNone(gc_root)
+            canvas._atomic_write_json(
+                gc_root / "current.json",
+                journal,
+                maximum_bytes=canvas.MAX_SNAPSHOT_MANIFEST_BYTES,
+            )
+
+        event_path = next(
+            (self.root / "_snapshots" / "events" / self.canvas_id).glob("*.json")
+        )
+        event_path.unlink()
+
+        recovered = self.snapshots.gc(now=future, apply=False)
+        self.assertTrue(recovered["pending_plan_recovered"])
+        self.assertEqual(recovered["candidate_events"], [])
+        self.assertEqual(recovered["candidate_objects"], [captured["sha256"]])
+        self.assertEqual(
+            recovered["candidate_blobs"], [canvas.hashlib.sha256(binary).hexdigest()]
+        )
+        self.assertEqual(recovered["pending_remaining_event_count"], 0)
+        self.assertEqual(recovered["pending_remaining_object_count"], 1)
+        self.assertEqual(recovered["pending_remaining_blob_count"], 1)
+
+        object_path = next(
+            (self.root / "_snapshots" / "objects" / "sha256").rglob("*.json.gz")
+        )
+        object_path.unlink()
+        recovered_after_object = self.snapshots.gc(now=future, apply=False)
+        self.assertTrue(recovered_after_object["pending_plan_recovered"])
+        self.assertEqual(recovered_after_object["candidate_objects"], [])
+        self.assertEqual(recovered_after_object["pending_remaining_object_count"], 0)
+        self.assertEqual(recovered_after_object["pending_remaining_blob_count"], 1)
+        applied = self.snapshots.gc(now=future, apply=True)
+        self.assertTrue(applied["pending_plan_recovered"])
+        self.assertEqual(applied["removed_object_count"], 0)
+        self.assertEqual(applied["removed_blob_count"], 1)
+        self.assertFalse(
+            (self.root / "_snapshots" / "gc" / "current.json").exists()
+        )
+
+    def test_gc_rejects_noncanonical_or_unbound_pending_journal(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        for index in range(2):
+            self.snapshots.capture_post_tool_use(
+                self.hook_payload(
+                    tool_use_id=f"call-journal-{index}", response={"text": str(index)}
+                ),
+                retention_days=1,
+                now=captured_at,
+            )
+        future = captured_at + timedelta(days=2)
+        preview = self.snapshots.gc(now=future, apply=False)
+        base_journal = {
+            "schema": canvas.SNAPSHOT_GC_SCHEMA,
+            "plan_id": preview["plan_id"],
+            "created_at": canvas._snapshot_iso(future),
+            "candidate_events": preview["candidate_events"],
+            "candidate_objects": preview["candidate_objects"],
+            "candidate_blobs": preview["candidate_blobs"],
+        }
+        with self.snapshots._locked(create=True) as snapshot_root:
+            self.assertIsNotNone(snapshot_root)
+            gc_root = self.snapshots._subdirectory(snapshot_root, "gc", create=True)
+            self.assertIsNotNone(gc_root)
+            journal_path = gc_root / "current.json"
+
+        variants: list[tuple[str, dict]] = []
+        bad_plan_id = dict(base_journal)
+        bad_plan_id["plan_id"] = "0" * 64
+        variants.append(("plan-id", bad_plan_id))
+        malformed = json.loads(json.dumps(base_journal))
+        malformed["candidate_events"][0]["event_id"] = "invalid"
+        variants.append(("malformed-event", malformed))
+        duplicate = json.loads(json.dumps(base_journal))
+        duplicate["candidate_events"].append(dict(duplicate["candidate_events"][0]))
+        variants.append(("duplicate-event", duplicate))
+        reversed_events = json.loads(json.dumps(base_journal))
+        reversed_events["candidate_events"].reverse()
+        variants.append(("unsorted-events", reversed_events))
+        uppercase_digest = json.loads(json.dumps(base_journal))
+        uppercase_digest["candidate_objects"][0] = uppercase_digest[
+            "candidate_objects"
+        ][0].upper()
+        variants.append(("uppercase-object", uppercase_digest))
+
+        for label, journal in variants:
+            with self.subTest(label=label):
+                canvas._atomic_write_json(
+                    journal_path,
+                    journal,
+                    maximum_bytes=canvas.MAX_SNAPSHOT_MANIFEST_BYTES,
+                )
+                with self.assertRaises(canvas.CorruptCanvasError):
+                    self.snapshots.gc(now=future, apply=False)
+
+        for event in preview["candidate_events"]:
+            self.assertTrue(
+                (
+                    self.root
+                    / "_snapshots"
+                    / "events"
+                    / event["canvas_id"]
+                    / f"{event['event_id']}.json"
+                ).exists()
+            )
+
+    def test_snapshot_reference_promotes_pin_without_entering_semantic_search(self) -> None:
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(response={"text": "SNAPSHOT_BODY_NEEDLE"})
+        )
+        store = canvas.CanvasStore(root=self.root)
+        store.initialize(self.canvas_id, goal="Promote only intentional evidence")
+        node = store.upsert_node(
+            self.canvas_id,
+            kind="verification",
+            status_value="done",
+            summary="Historical receipt preserved",
+            evidence_refs=[
+                {"pointer": captured["snapshot_uri"], "sha256": captured["sha256"]}
+            ],
+        )
+        event = self.snapshots.read_event(self.canvas_id, captured["event_id"])
+        self.assertTrue(event["manifest"]["pinned"])
+        self.assertEqual(event["manifest"]["pin_references"][0]["node_id"], node["node_id"])
+        search = store.search("SNAPSHOT_BODY_NEEDLE", canvas_id=self.canvas_id)
+        self.assertEqual(search["hits"], [])
+        self.assertEqual(search["skipped_count"], 0)
+
+    def test_snapshot_promotion_rejects_missing_transitive_blob(self) -> None:
+        binary = b"promotion-blob"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(binary).decode(
+            "ascii"
+        )
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(response={"attachment": data_url})
+        )
+        blob_path = next(
+            (self.root / "_snapshots" / "blobs" / "sha256").rglob("*.bin.gz")
+        )
+        blob_path.unlink()
+        store = canvas.CanvasStore(root=self.root)
+        store.initialize(self.canvas_id, goal="Reject incomplete evidence")
+
+        with self.assertRaises(canvas.CanvasError):
+            store.upsert_node(
+                self.canvas_id,
+                kind="verification",
+                status_value="done",
+                summary="Must not commit unexportable evidence",
+                evidence_refs=[
+                    {"pointer": captured["snapshot_uri"], "sha256": captured["sha256"]}
+                ],
+            )
+
+        pins_root = self.root / "_snapshots" / "pins"
+        self.assertFalse(pins_root.exists() and any(pins_root.rglob("*.json")))
+
+    def test_post_tool_hook_cli_captures_silently_and_fails_open(self) -> None:
+        payload = self.hook_payload(response={"text": "hook subprocess receipt"})
+        completed = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+            input=json.dumps(payload),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(completed.stdout, "")
+        listed = self.snapshots.list_events(canvas_id=self.canvas_id)
+        self.assertEqual(len(listed["events"]), 1)
+
+        malformed = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+            input="{not-json",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        self.assertEqual(malformed.returncode, 0)
+        self.assertEqual(malformed.stdout, "")
+        self.assertIn("capture unavailable", malformed.stderr.lower())
+
+    def test_oversize_hook_input_fails_open_without_partial_snapshot(self) -> None:
+        payload = self.hook_payload(response={"text": "x" * 4096})
+        environment = os.environ.copy()
+        environment[canvas.SNAPSHOT_HOOK_LIMIT_ENV] = "1024"
+        completed = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+            input=json.dumps(payload),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=environment,
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        self.assertEqual(completed.returncode, 0)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("capture unavailable", completed.stderr.lower())
+        self.assertEqual(self.snapshots.list_events(canvas_id=self.canvas_id)["events"], [])
+
+    def test_concurrent_hook_processes_dedupe_one_object_without_lost_events(self) -> None:
+        processes: list[subprocess.Popen[str]] = []
+        for index in range(4):
+            payload = self.hook_payload(
+                tool_use_id=f"call-concurrent-{index}",
+                response={"text": "shared concurrent response"},
+            )
+            process = subprocess.Popen(
+                [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                env=os.environ.copy(),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+            )
+            assert process.stdin is not None
+            process.stdin.write(json.dumps(payload))
+            process.stdin.close()
+            processes.append(process)
+        receipts: list[tuple[int | None, str, str]] = []
+        for process in processes:
+            process.wait(timeout=30)
+            stdout = process.stdout.read() if process.stdout is not None else ""
+            stderr = process.stderr.read() if process.stderr is not None else ""
+            receipts.append((process.returncode, stdout, stderr))
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stderr is not None:
+                process.stderr.close()
+        for returncode, stdout, stderr in receipts:
+            self.assertEqual(returncode, 0, stderr)
+            self.assertEqual(stdout, "")
+            self.assertEqual(stderr, "")
+        listed = self.snapshots.list_events(canvas_id=self.canvas_id, limit=10)
+        self.assertEqual(listed["count"], 4)
+        self.assertEqual(len({event["sha256"] for event in listed["events"]}), 1)
+        objects = list((self.root / "_snapshots" / "objects" / "sha256").rglob("*.json.gz"))
+        self.assertEqual(len(objects), 1)
+
+    def test_snapshot_promotion_rejects_corrupt_transitive_blob_without_node_or_pin(self) -> None:
+        binary = b"promotion-corrupt-blob"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(
+            binary
+        ).decode("ascii")
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-corrupt-promotion",
+                response={"attachment": data_url},
+            )
+        )
+        blob_path = next(
+            (self.root / "_snapshots" / "blobs" / "sha256").rglob("*.bin.gz")
+        )
+        blob_path.write_bytes(b"not-a-gzip-blob")
+        store = canvas.CanvasStore(root=self.root)
+        store.initialize(self.canvas_id, goal="Reject corrupt evidence")
+
+        with self.assertRaises(canvas.CorruptCanvasError):
+            store.upsert_node(
+                self.canvas_id,
+                kind="verification",
+                status_value="done",
+                summary="Must not accept corrupt evidence",
+                evidence_refs=[
+                    {"pointer": captured["snapshot_uri"], "sha256": captured["sha256"]}
+                ],
+            )
+
+        self.assertEqual(len(store.read(self.canvas_id)["nodes"]), 1)
+        pins_root = self.root / "_snapshots" / "pins"
+        self.assertFalse(pins_root.exists() and any(pins_root.rglob("*.json")))
+
+    def test_corrupt_snapshot_object_fails_hash_verified_read(self) -> None:
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(response={"text": "integrity receipt"})
+        )
+        object_path = next(
+            (self.root / "_snapshots" / "objects" / "sha256").rglob("*.json.gz")
+        )
+        object_path.write_bytes(b"not-a-gzip-object")
+        with self.assertRaises(canvas.CorruptCanvasError):
+            self.snapshots.read_event(
+                self.canvas_id, captured["event_id"], include_payload=True
+            )
+
+    def test_event_manifest_is_bound_to_canvas_event_and_session_identity(self) -> None:
+        captured = self.snapshots.capture_post_tool_use(self.hook_payload())
+        event_path = next(
+            (self.root / "_snapshots" / "events" / self.canvas_id).glob("*.json")
+        )
+        original = json.loads(event_path.read_text(encoding="utf-8"))
+        captured_at = canvas._parse_snapshot_iso(original["captured_at"])
+        mutations = {
+            "canvas_id": canvas.derive_canvas_id("foreign-session"),
+            "event_id": "obs-" + "0" * 64,
+            "session_id_sha256": "0" * 64,
+            "session_id_sha256_upper": original["session_id_sha256"].upper(),
+            "sha256_upper": original["sha256"].upper(),
+            "expires_too_soon": canvas._snapshot_iso(
+                captured_at + timedelta(hours=12)
+            ),
+            "expires_too_late": canvas._snapshot_iso(
+                captured_at + timedelta(days=canvas.MAX_SNAPSHOT_RETENTION_DAYS + 1)
+            ),
+        }
+        for field, value in mutations.items():
+            with self.subTest(field=field):
+                manifest = dict(original)
+                if field.startswith("expires_"):
+                    manifest["expires_at"] = value
+                elif field.endswith("_upper"):
+                    manifest[field.removesuffix("_upper")] = value
+                else:
+                    manifest[field] = value
+                event_path.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaises(canvas.CorruptCanvasError):
+                    self.snapshots.read_event(self.canvas_id, captured["event_id"])
+        event_path.write_text(json.dumps(original), encoding="utf-8")
+
+    def test_event_manifest_declared_object_length_is_verified_on_read_and_gc(self) -> None:
+        captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(tool_use_id="call-length", response={"text": "bound"}),
+            retention_days=1,
+            now=captured_at,
+        )
+        event_path = next(
+            (self.root / "_snapshots" / "events" / self.canvas_id).glob("*.json")
+        )
+        manifest = json.loads(event_path.read_text(encoding="utf-8"))
+        manifest["sanitized_bytes"] += 1
+        event_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+        with self.assertRaises(canvas.CorruptCanvasError):
+            self.snapshots.read_event(
+                self.canvas_id, captured["event_id"], include_payload=True
+            )
+        with self.assertRaises(canvas.CorruptCanvasError):
+            self.snapshots.gc(now=captured_at + timedelta(days=2), apply=True)
+        self.assertTrue(event_path.exists())
+
+    def test_event_manifest_blob_declarations_are_bound_to_object_graph(self) -> None:
+        binary = b"declared-blob"
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(binary).decode(
+            "ascii"
+        )
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(response={"attachment": data_url})
+        )
+        event_path = next(
+            (self.root / "_snapshots" / "events" / self.canvas_id).glob("*.json")
+        )
+        original = json.loads(event_path.read_text(encoding="utf-8"))
+        mutations = [
+            ("byte-length", lambda manifest: manifest["blobs"][0].__setitem__("byte_length", manifest["blobs"][0]["byte_length"] + 1)),
+            ("uppercase-digest", lambda manifest: manifest["blobs"][0].__setitem__("sha256", manifest["blobs"][0]["sha256"].upper())),
+        ]
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                manifest = json.loads(json.dumps(original))
+                mutate(manifest)
+                event_path.write_text(json.dumps(manifest), encoding="utf-8")
+                with self.assertRaises(canvas.CorruptCanvasError):
+                    self.snapshots.read_event(self.canvas_id, captured["event_id"])
+
+    def test_gc_rejects_aliased_canvas_event_directory_without_foreign_delete(self) -> None:
+        self.snapshots.capture_post_tool_use(
+            self.hook_payload(tool_use_id="bootstrap", response={"text": "bootstrap"})
+        )
+        foreign_root = self.base / "foreign-store"
+        foreign_store = canvas.SnapshotStore(root=foreign_root)
+        foreign_session = "foreign-gc-session"
+        foreign_canvas = canvas.derive_canvas_id(foreign_session)
+        payload = self.hook_payload(tool_use_id="foreign-expired", response={"text": "foreign"})
+        payload["session_id"] = foreign_session
+        foreign = foreign_store.capture_post_tool_use(
+            payload,
+            retention_days=1,
+            now=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        foreign_events = foreign_root / "_snapshots" / "events" / foreign_canvas
+        alias = self.root / "_snapshots" / "events" / foreign_canvas
+        try:
+            alias.symlink_to(foreign_events, target_is_directory=True)
+        except OSError as exc:
+            if os.name != "nt":
+                self.skipTest(f"directory symlink unavailable: {exc}")
+            linked = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", str(alias), str(foreign_events)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if linked.returncode != 0:
+                self.skipTest("directory alias fixture is unavailable")
+        try:
+            with self.assertRaises(canvas.SecurityBoundaryError):
+                self.snapshots.gc(
+                    now=datetime(2026, 1, 3, tzinfo=timezone.utc), apply=True
+                )
+            self.assertTrue(
+                (foreign_events / f"{foreign['event_id']}.json").exists()
+            )
+        finally:
+            if os.path.lexists(alias):
+                os.rmdir(alias) if os.name == "nt" else alias.unlink()
+
+    def test_snapshot_directory_alias_is_rejected_before_capture(self) -> None:
+        self.root.mkdir()
+        foreign = self.base / "foreign-snapshots"
+        foreign.mkdir()
+        alias = self.root / "_snapshots"
+        try:
+            alias.symlink_to(foreign, target_is_directory=True)
+        except OSError as exc:
+            if os.name != "nt":
+                self.skipTest(f"directory symlink unavailable: {exc}")
+            linked = subprocess.run(
+                ["cmd.exe", "/d", "/c", "mklink", "/J", str(alias), str(foreign)],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=20,
+                check=False,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            if linked.returncode != 0:
+                self.skipTest("snapshot directory alias fixture is unavailable")
+        with self.assertRaises(canvas.SecurityBoundaryError):
+            self.snapshots.capture_post_tool_use(self.hook_payload())
+        self.assertEqual(list(foreign.iterdir()), [])
+
+    def test_snapshot_uri_hash_mismatch_is_rejected_without_pin(self) -> None:
+        captured = self.snapshots.capture_post_tool_use(self.hook_payload())
+        store = canvas.CanvasStore(root=self.root)
+        store.initialize(self.canvas_id, goal="Reject mismatched snapshot evidence")
+        with self.assertRaisesRegex(canvas.CanvasError, "do not match"):
+            store.upsert_node(
+                self.canvas_id,
+                kind="verification",
+                status_value="done",
+                summary="Mismatched evidence must fail",
+                evidence_refs=[
+                    {"pointer": captured["snapshot_uri"], "sha256": "f" * 64}
+                ],
+            )
+        event = self.snapshots.read_event(self.canvas_id, captured["event_id"])
+        self.assertFalse(event["manifest"]["pinned"])
 
 
 if __name__ == "__main__":

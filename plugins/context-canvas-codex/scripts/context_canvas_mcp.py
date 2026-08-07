@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Dependency-free local MCP wrapper for Context Canvas Codex.
 
-The server uses newline-delimited JSON-RPC over stdio. It never opens evidence
-pointers, exposes a network listener, or reads a Codex transcript.
+The server uses newline-delimited JSON-RPC over stdio. It never opens arbitrary
+evidence pointers, returns snapshot bodies, exposes a network listener, or reads
+a Codex transcript.
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ canvas = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(canvas)
 
 SERVER_NAME = "context-canvas-codex"
-SERVER_VERSION = "0.2.0"
+SERVER_VERSION = "0.3.0"
 SUPPORTED_PROTOCOL_VERSIONS = (
     "2025-11-25",
     "2025-06-18",
@@ -156,6 +157,64 @@ TOOLS = [
             description="Render or write one pointer-only closeout.",
         ),
     },
+    {
+        "name": "snapshot_list",
+        "description": (
+            "List bounded historical PostToolUse snapshot manifests. Payload bodies are "
+            "excluded from MCP and semantic search."
+        ),
+        "inputSchema": _object_schema(
+            {
+                "canvas_id": {"type": "string", "pattern": "^cc-[0-9a-f]{64}$"},
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": canvas.MAX_SNAPSHOT_LIST_LIMIT,
+                },
+            },
+            [],
+            description="List bounded snapshot provenance without payload bodies.",
+        ),
+    },
+    {
+        "name": "snapshot_read",
+        "description": (
+            "Read one bounded snapshot manifest and pin state. Full policy-sanitized payload "
+            "retrieval remains an explicit CLI export operation."
+        ),
+        "inputSchema": _object_schema(
+            {
+                "canvas_id": {"type": "string", "pattern": "^cc-[0-9a-f]{64}$"},
+                "event_id": {"type": "string", "pattern": "^obs-[0-9a-f]{64}$"},
+            },
+            ["canvas_id", "event_id"],
+            description="Read one snapshot manifest without its payload body.",
+        ),
+    },
+    {
+        "name": "snapshot_pin",
+        "description": "Durably pin one existing policy-sanitized snapshot by content hash.",
+        "inputSchema": _object_schema(
+            {
+                "sha256": {"type": "string", "pattern": "^[0-9a-fA-F]{64}$"},
+                "reason": {"type": "string", "maxLength": 160},
+            },
+            ["sha256"],
+            description="Pin one snapshot object outside ordinary retention.",
+        ),
+    },
+    {
+        "name": "snapshot_gc",
+        "description": (
+            "Preview expired unpinned snapshot cleanup. Set apply=true only for an "
+            "intentional local retention action."
+        ),
+        "inputSchema": _object_schema(
+            {"apply": {"type": "boolean"}},
+            [],
+            description="Preview or apply snapshot retention cleanup.",
+        ),
+    },
 ]
 
 
@@ -213,6 +272,8 @@ def _tool_read(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
         "canvas": payload,
         "mermaid": canvas.render_mermaid(payload) if payload is not None else None,
         "raw_evidence_supported": False,
+        "snapshot_evidence_supported": True,
+        "unredacted_raw_evidence_supported": False,
     }
 
 
@@ -231,6 +292,35 @@ def _tool_closeout(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
     return store.closeout(arguments.get("canvas_id"), write=write)
 
 
+def _snapshot_store(store: Any) -> Any:
+    return canvas.SnapshotStore(root=store.root)
+
+
+def _tool_snapshot_list(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _snapshot_store(store).list_events(
+        canvas_id=arguments.get("canvas_id"), limit=arguments.get("limit", 20)
+    )
+
+
+def _tool_snapshot_read(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _snapshot_store(store).read_event(
+        arguments.get("canvas_id"), arguments.get("event_id"), include_payload=False
+    )
+
+
+def _tool_snapshot_pin(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _snapshot_store(store).pin(
+        arguments.get("sha256"), reason=arguments.get("reason", "explicit MCP pin")
+    )
+
+
+def _tool_snapshot_gc(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    apply = arguments.get("apply", False)
+    if not isinstance(apply, bool):
+        raise canvas.CanvasError("apply must be a boolean")
+    return _snapshot_store(store).gc(apply=apply)
+
+
 TOOL_HANDLERS: dict[str, Callable[[Any, dict[str, Any]], dict[str, Any]]] = {
     "canvas_start": _tool_start,
     "canvas_upsert_node": _tool_upsert,
@@ -238,6 +328,10 @@ TOOL_HANDLERS: dict[str, Callable[[Any, dict[str, Any]], dict[str, Any]]] = {
     "canvas_read": _tool_read,
     "canvas_search": _tool_search,
     "canvas_closeout": _tool_closeout,
+    "snapshot_list": _tool_snapshot_list,
+    "snapshot_read": _tool_snapshot_read,
+    "snapshot_pin": _tool_snapshot_pin,
+    "snapshot_gc": _tool_snapshot_gc,
 }
 
 

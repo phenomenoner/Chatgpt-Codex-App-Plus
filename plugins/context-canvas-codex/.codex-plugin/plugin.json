@@ -1,7 +1,7 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.2.0",
-  "description": "Local, evidence-pointer-only task maps for Codex App and CLI.",
+  "version": "0.3.0",
+  "description": "Bounded task maps plus policy-sanitized historical tool snapshots for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"
   },
@@ -12,14 +12,16 @@
     "context-management",
     "checkpoint",
     "evidence",
+    "snapshot",
+    "cache",
     "windows"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Context Canvas Codex",
-    "shortDescription": "Map and recover evidence-backed task state.",
-    "longDescription": "Keeps bounded task facts, dependencies, and hash-bound evidence pointers in a local Windows-hardened store shared by Codex App, Codex CLI, and a bundled MCP server. It never captures tool output or reads evidence content.",
+    "shortDescription": "Recover task state and archive historical tool snapshots.",
+    "longDescription": "Keeps bounded task facts and hash-bound evidence pointers separate from a local PostToolUse snapshot store with explicit textual-redaction and opaque-media policies. Snapshots are compressed, content-addressed, deduplicated, excluded from semantic search, time-limited unless pinned, and exportable through an explicit CLI operation.",
     "developerName": "phenomenoner",
     "category": "Productivity",
     "capabilities": [
@@ -29,7 +31,8 @@
     "defaultPrompt": [
       "Create a safe checkpoint for this long-running task.",
       "Restore this task's active blockers after compaction.",
-      "Search this task's pointer-only Context Canvas and prepare a closeout."
+      "Search this task's Context Canvas and prepare a closeout.",
+      "List historical tool snapshots and export one policy-sanitized payload."
     ]
   }
 }

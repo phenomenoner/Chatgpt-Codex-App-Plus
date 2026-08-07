@@ -6,7 +6,7 @@ Original material authored for ChatGPT Codex App Plus is distributed under the r
 
 The following components are references only and are not redistributed or relicensed here:
 
-- `baton-fanout-skill`: https://github.com/phenomenoner/baton-fanout-skill
+- `baton-fanout-skill` Codex branch: https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing
 - Understand Anything: https://github.com/Egonex-AI/Understand-Anything
 - OpenAI skills: https://github.com/openai/skills
 

@@ -15,7 +15,7 @@
 The best Codex workflows rarely live in one file. They emerge across durable instructions, focused skills, PowerShell helpers, and safety contracts. Codex App Plus packages the reusable parts into one curated outer layer:
 
 - Review to closure: do not stop at the first blocker; keep going until required coverage reaches a fixed point.
-- Preserve long-task shape: keep goals, blockers, decisions, dependencies, and verification hashes local across resume and compaction boundaries.
+- Preserve long-task shape and evidence: keep a semantic task map separate from historical tool snapshots governed by an explicit sanitization policy across resume, compaction, and later investigation.
 - Supervise long runs cheaply: move heartbeat, stall detection, and terminal wakeups outside expensive reasoning turns.
 - Delegate with brakes: require a real independence and ownership case before spawning workers.
 - Reproduce the useful parts: ship safe configuration examples and installable skills without copying runtime state.
@@ -23,9 +23,9 @@ The best Codex workflows rarely live in one file. They emerge across durable ins
 
 ## Included components
 
-The bundle includes the `context-canvas-codex` plugin plus seven original skills and tools. Context Canvas provides a local evidence-pointer task map, a read-only `SessionStart` restore hook, dependency-aware nodes, bounded search and closeout, and a persistent stdio MCP surface shared by Codex App and CLI. The other components cover batch-complete review, long-run supervision, a bounded Luna CLI worker, completeness synthesis, incident-to-regression packaging, an explicit Claude review adapter, and A2A Superhub operation.
+The bundle includes the `context-canvas-codex` plugin plus seven original skills and tools. Context Canvas provides a local semantic task map plus content-addressed, deduplicated, TTL/pin-managed historical tool snapshots captured after sanitization. It also provides resume/compact recovery, dependency-aware nodes, bounded search and closeout, and a persistent stdio MCP surface shared by Codex App and CLI. The other components cover batch-complete review, long-run supervision, a bounded Luna CLI worker, completeness synthesis, incident-to-regression packaging, an explicit Claude review adapter, and A2A Superhub operation.
 
-Components that already have a canonical public home—such as [baton-fanout-skill](https://github.com/phenomenoner/baton-fanout-skill), [Understand Anything](https://github.com/Egonex-AI/Understand-Anything), and [OpenAI skills](https://github.com/openai/skills)—stay as versioned pointers instead of copied forks. See the [component catalog](catalog/components.json) for the complete inventory.
+Components that already have a canonical public home stay as versioned pointers instead of copied forks. Codex users are pointed directly to the [Codex-specialized Baton branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing), while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
 
 The [Context Canvas technical note](docs/context-canvas-codex.md) records the Hermes comparison, Codex-specific boundaries, schema, and reproducible latency probe.
 
@@ -48,7 +48,7 @@ codex plugin list
 
 First open a new task and confirm that the model actually received that task's
 opaque Context Canvas ID. If the plugin, skill, and MCP server appear but the
-new ID does not, install the same read-only hook through Codex's user
+new ID does not, install the same `SessionStart` plus `PostToolUse` hook pair through Codex's user
 configuration layer from the repository root:
 
 ```powershell
@@ -56,8 +56,7 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py in
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-Then use `/hooks` in Codex CLI to review and trust that `SessionStart`
-definition, and repeat the ID plus `canvas_*` proof in another fresh task. In a
+Then use `/hooks` in Codex CLI to review and trust both definitions. In another fresh task, repeat the opaque-ID proof and make one harmless tool call; a new `_snapshots/events` manifest is the capture proof. In a
 local Codex CLI 0.146.0 acceptance run, plugin MCP and skill discovery worked
 while the plugin-bundled hook did not execute. The explicit installer is the
 compatibility layer; it preserves peer hooks and a hash-addressed backup.
@@ -84,9 +83,13 @@ The exporter never mirrors a Codex home directory. It copies only manifest-appro
 
 Read [the architecture](docs/architecture.md) and [weekly sync contract](docs/weekly-sync.md) for details.
 
-## Context Canvas tradeoff
+## Context Canvas layers
 
-The Hermes autopilot captures selected tool results inside the agent process. The Codex adapter intentionally does not copy that behavior: `PostToolUse` exposes tool inputs and responses, and a command hook would add a process launch to every matched call. Checkpoints remain explicit and pointer-only; repeated operations use the persistent stdio MCP server. One 13-node Windows/Python 3.13.5 development snapshot measured MCP reads at 6.719 ms p50 / 8.569 ms p95 and fresh CLI reads at 626.397 ms p50. This is a reproducible machine snapshot, not a universal latency guarantee.
+The current design does not equate “preserve a complete tool result” with “create a semantic node.” For opted-in `PostToolUse` callback payloads that Codex actually emits, it archives the complete model-facing payload supplied to the hook under the declared sanitization policy. One suffix-aware classifier covers structured keys, textual assignments, percent/form query keys, bracket/index notation, JSON Unicode escapes, and escaped wrappers. Any malformed-percent assignment key is redacted conservatively, and earlier matches do not suppress the remaining encoded or escaped representation passes; adjacent safe query parameters remain usable. Supported base64 and percent-encoded textual data URLs, including unquoted MIME parameters, are canonicalized, decoded, and redacted; a `data:` value that cannot be parsed safely rejects the whole observation. Image, audio, video, and arbitrary binary media is preserved byte-for-byte and explicitly labelled `opaque-uninspected`, not represented as inspected or sealed raw evidence. Oversized inputs are skipped whole rather than truncated; SHA-256-addressed deterministic gzip objects deduplicate repeated content; ordinary snapshots have a 14-day TTL. GC recomputes and validates the canonical journal plan, then derives interruption recovery from current verified state. Semantic promotion verifies transitive blobs before pinning. Snapshot bodies stay outside Canvas search, resume injection, closeout, and MCP responses. Full retrieval is an explicit CLI export.
+
+Current Codex invokes `PostToolUse` when a supported handler returns an opted-in post-tool payload. A Bash command with a non-zero exit can still produce that callback and archived exit metadata. Dispatch or handler failures that produce no callback payload remain absent, and this adapter has no separate failure sibling. After installation, prove actual capture in a fresh task with a harmless call and a new manifest; plugin discovery or configuration state alone is insufficient.
+
+The repository includes a machine-readable benchmark covering persistent MCP reads, fresh CLI startup, first snapshot write, warm dedupe, manifest reads, exact GC preview, and cold small/large `PostToolUse` hooks. GC validates the event/object/blob graph and discovers orphans, so it is not comparable to an earlier count-only preview. Python startup, ACL checks, storage, antivirus, concurrent load, and payload shape materially affect results; publish or compare numbers only with the executable hashes and environment from the same receipt.
 
 With `approval_policy = "never"`, non-interactive Codex cancels MCP calls that
 still require approval; it does not auto-approve them. Acceptance therefore

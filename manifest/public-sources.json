@@ -96,9 +96,9 @@
     {
       "id": "baton-fanout-skill",
       "mode": "pointer",
-      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
-      "version": "v1.0.0",
-      "commit": "c1a05b2ac12ce00df0e5feb90fb42191f935c9c7",
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing",
+      "version": "codex-routing-2026-08-07",
+      "commit": "69b805df9df2252119b7a87886097f8cafd5e11a",
       "license": "MIT"
     },
     {

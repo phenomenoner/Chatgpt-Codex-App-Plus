@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Install the Context Canvas SessionStart adapter as a Codex config-layer hook.
+"""Install Context Canvas lifecycle and snapshot adapters as Codex user hooks.
 
 Some Codex releases expose plugin MCP servers and skills while not executing
 plugin-bundled lifecycle hooks. This installer keeps the same audited hook code
-in a stable user-level location and merges one exact handler into hooks.json.
+in a stable user-level location and merges the exact lifecycle and capture
+handlers into hooks.json.
 """
 
 from __future__ import annotations
@@ -19,14 +20,17 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA = "context-canvas-codex-hook-install.v1"
+SCHEMA = "context-canvas-codex-hook-install.v2"
+LEGACY_SCHEMA = "context-canvas-codex-hook-install.v1"
 SOURCE_SCRIPT = Path(__file__).with_name("context_canvas.py")
 INSTALL_DIR_NAME = "context-canvas-codex"
 INSTALLED_SCRIPT_NAME = "context_canvas.py"
 INSTALL_MANIFEST_NAME = "hook-install.json"
 HOOKS_FILE_NAME = "hooks.json"
-STATUS_MESSAGE = "Restoring Context Canvas [context-canvas-codex user hook]"
+SESSION_STATUS_MESSAGE = "Restoring Context Canvas [context-canvas-codex user hook]"
+SNAPSHOT_STATUS_MESSAGE = "Archiving tool snapshot [context-canvas-codex user hook]"
 SESSION_MATCHER = "^(startup|resume|clear|compact)$"
+POST_TOOL_MATCHER = ".*"
 MAX_JSON_BYTES = 1024 * 1024
 
 
@@ -136,23 +140,41 @@ def _powershell_quote(path: Path) -> str:
     return "'" + os.fspath(path).replace("'", "''") + "'"
 
 
-def _expected_group(installed_script: Path) -> dict[str, Any]:
+def _expected_groups(installed_script: Path) -> dict[str, dict[str, Any]]:
     return {
-        "matcher": SESSION_MATCHER,
-        "hooks": [
-            {
-                "type": "command",
-                "command": (
-                    f"python3 -I {shlex.quote(installed_script.as_posix())} hook-session-start"
-                ),
-                "commandWindows": (
-                    f"python -I {_powershell_quote(installed_script)} hook-session-start"
-                ),
-                "timeout": 10,
-                "statusMessage": STATUS_MESSAGE,
-                "additionalContextLimit": 5000,
-            }
-        ],
+        "SessionStart": {
+            "matcher": SESSION_MATCHER,
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        f"python3 -I {shlex.quote(installed_script.as_posix())} hook-session-start"
+                    ),
+                    "commandWindows": (
+                        f"python -I {_powershell_quote(installed_script)} hook-session-start"
+                    ),
+                    "timeout": 10,
+                    "statusMessage": SESSION_STATUS_MESSAGE,
+                    "additionalContextLimit": 5000,
+                }
+            ],
+        },
+        "PostToolUse": {
+            "matcher": POST_TOOL_MATCHER,
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        f"python3 -I {shlex.quote(installed_script.as_posix())} hook-post-tool-use"
+                    ),
+                    "commandWindows": (
+                        f"python -I {_powershell_quote(installed_script)} hook-post-tool-use"
+                    ),
+                    "timeout": 30,
+                    "statusMessage": SNAPSHOT_STATUS_MESSAGE,
+                }
+            ],
+        },
     }
 
 
@@ -170,15 +192,18 @@ def _hooks_document(path: Path) -> dict[str, Any]:
         payload["hooks"] = {}
     elif not isinstance(hooks, dict):
         raise InstallerError("Codex hooks.json field hooks must contain an object")
-    groups = payload["hooks"].get("SessionStart")
-    if groups is None:
-        payload["hooks"]["SessionStart"] = []
-    elif not isinstance(groups, list):
-        raise InstallerError("Codex SessionStart hooks must contain an array")
+    for event_name in ("SessionStart", "PostToolUse"):
+        groups = payload["hooks"].get(event_name)
+        if groups is None:
+            payload["hooks"][event_name] = []
+        elif not isinstance(groups, list):
+            raise InstallerError(f"Codex {event_name} hooks must contain an array")
     return payload
 
 
-def _managed_group_index(groups: list[Any], expected: dict[str, Any]) -> int | None:
+def _managed_group_index(
+    groups: list[Any], expected: dict[str, Any], *, marker: str
+) -> int | None:
     matches: list[int] = []
     marker_matches: list[int] = []
     for index, group in enumerate(groups):
@@ -190,7 +215,7 @@ def _managed_group_index(groups: list[Any], expected: dict[str, Any]) -> int | N
         if not isinstance(handlers, list):
             continue
         if any(
-            isinstance(handler, dict) and handler.get("statusMessage") == STATUS_MESSAGE
+            isinstance(handler, dict) and handler.get("statusMessage") == marker
             for handler in handlers
         ):
             marker_matches.append(index)
@@ -201,12 +226,17 @@ def _managed_group_index(groups: list[Any], expected: dict[str, Any]) -> int | N
     return matches[0] if matches else None
 
 
-def _manifest_payload(source_hash: str, group: dict[str, Any]) -> dict[str, Any]:
+def _manifest_payload(
+    source_hash: str, groups: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
     return {
         "schema": SCHEMA,
         "source_sha256": source_hash,
         "installed_sha256": source_hash,
-        "handler_sha256": _sha256_bytes(_json_bytes(group)),
+        "handlers_sha256": {
+            event_name: _sha256_bytes(_json_bytes(group))
+            for event_name, group in sorted(groups.items())
+        },
         "hooks_file": HOOKS_FILE_NAME,
         "installed_script": f"{INSTALL_DIR_NAME}/{INSTALLED_SCRIPT_NAME}",
     }
@@ -216,14 +246,26 @@ def _load_owned_manifest(path: Path) -> dict[str, Any] | None:
     payload = _load_json(path, "Context Canvas hook install manifest", missing=None)
     if payload is None:
         return None
-    if not isinstance(payload, dict) or payload.get("schema") != SCHEMA:
+    if not isinstance(payload, dict) or payload.get("schema") not in {SCHEMA, LEGACY_SCHEMA}:
         raise InstallerError("Context Canvas hook install manifest is foreign or invalid")
     if payload.get("installed_script") != f"{INSTALL_DIR_NAME}/{INSTALLED_SCRIPT_NAME}":
         raise InstallerError("Context Canvas hook install manifest target is invalid")
-    for field in ("source_sha256", "installed_sha256", "handler_sha256"):
+    for field in ("source_sha256", "installed_sha256"):
         value = payload.get(field)
         if not isinstance(value, str) or len(value) != 64:
             raise InstallerError(f"Context Canvas hook install manifest field {field} is invalid")
+    if payload.get("schema") == LEGACY_SCHEMA:
+        value = payload.get("handler_sha256")
+        if not isinstance(value, str) or len(value) != 64:
+            raise InstallerError("legacy Context Canvas handler digest is invalid")
+    else:
+        handler_hashes = payload.get("handlers_sha256")
+        if (
+            not isinstance(handler_hashes, dict)
+            or set(handler_hashes) != {"SessionStart", "PostToolUse"}
+            or any(not isinstance(value, str) or len(value) != 64 for value in handler_hashes.values())
+        ):
+            raise InstallerError("Context Canvas handler digests are invalid")
     return payload
 
 
@@ -252,7 +294,7 @@ def _state(codex_home: Path) -> dict[str, Any]:
     hooks_path = codex_home / HOOKS_FILE_NAME
     source = _regular_file_bytes(SOURCE_SCRIPT, "Context Canvas source script")
     source_hash = _sha256_bytes(source)
-    expected = _expected_group(installed_script)
+    expected = _expected_groups(installed_script)
     return {
         "install_dir": install_dir,
         "installed_script": installed_script,
@@ -277,9 +319,16 @@ def check(codex_home: Path) -> dict[str, Any]:
         if _sha256_bytes(installed) != state["source_hash"]:
             errors.append("installed hook script drifted from the current source")
         hooks = _hooks_document(state["hooks_path"])
-        groups = hooks["hooks"]["SessionStart"]
-        if _managed_group_index(groups, state["expected"]) is None:
-            errors.append("Context Canvas user-hook handler is missing")
+        markers = {
+            "SessionStart": SESSION_STATUS_MESSAGE,
+            "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
+        }
+        for event_name, expected_group in state["expected"].items():
+            groups = hooks["hooks"][event_name]
+            if _managed_group_index(
+                groups, expected_group, marker=markers[event_name]
+            ) is None:
+                errors.append(f"Context Canvas {event_name} user-hook handler is missing")
         if manifest is not None and manifest != _manifest_payload(
             state["source_hash"], state["expected"]
         ):
@@ -300,29 +349,58 @@ def install(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     _ensure_plain_directory(state["install_dir"], "Context Canvas install directory")
     manifest = _load_owned_manifest(state["manifest_path"])
-    if _lexists(state["installed_script"]) and manifest is None:
-        raise InstallerError("refusing to overwrite a foreign Context Canvas hook script")
-
     hooks = _hooks_document(state["hooks_path"])
-    groups = hooks["hooks"]["SessionStart"]
-    group_index = _managed_group_index(groups, state["expected"])
+    if _lexists(state["installed_script"]) and manifest is None:
+        interrupted_hash = _sha256_bytes(
+            _regular_file_bytes(
+                state["installed_script"], "unmanifested Context Canvas hook script"
+            )
+        )
+        if interrupted_hash != state["source_hash"]:
+            raise InstallerError("refusing to overwrite a foreign Context Canvas hook script")
+
+    markers = {
+        "SessionStart": SESSION_STATUS_MESSAGE,
+        "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
+    }
+    group_indexes = {
+        event_name: _managed_group_index(
+            hooks["hooks"][event_name],
+            expected_group,
+            marker=markers[event_name],
+        )
+        for event_name, expected_group in state["expected"].items()
+    }
     installed_hash = None
     if _lexists(state["installed_script"]):
         installed_hash = _sha256_bytes(
             _regular_file_bytes(state["installed_script"], "installed Context Canvas hook script")
         )
+    if manifest is not None and manifest["schema"] == LEGACY_SCHEMA:
+        expected_legacy_handler_hash = _sha256_bytes(
+            _json_bytes(state["expected"]["SessionStart"])
+        )
+        if manifest["handler_sha256"] != expected_legacy_handler_hash:
+            raise InstallerError(
+                "legacy Context Canvas SessionStart handler digest does not match the managed hook"
+            )
+        if installed_hash != manifest["installed_sha256"]:
+            raise InstallerError(
+                "legacy Context Canvas installed script digest does not match the owned file"
+            )
     expected_manifest = _manifest_payload(state["source_hash"], state["expected"])
     changed = (
         installed_hash != state["source_hash"]
-        or group_index is None
+        or any(index is None for index in group_indexes.values())
         or manifest != expected_manifest
     )
     backup = None
     if changed:
         backup = _backup_existing_hooks(state["hooks_path"], state["install_dir"])
         _atomic_write(state["installed_script"], state["source"])
-        if group_index is None:
-            groups.append(state["expected"])
+        for event_name, expected_group in state["expected"].items():
+            if group_indexes[event_name] is None:
+                hooks["hooks"][event_name].append(expected_group)
         _atomic_write(state["hooks_path"], _json_bytes(hooks))
         _atomic_write(state["manifest_path"], _json_bytes(expected_manifest))
 
@@ -359,8 +437,18 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     manifest = _load_owned_manifest(state["manifest_path"])
     hooks = _hooks_document(state["hooks_path"])
-    groups = hooks["hooks"]["SessionStart"]
-    group_index = _managed_group_index(groups, state["expected"])
+    markers = {
+        "SessionStart": SESSION_STATUS_MESSAGE,
+        "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
+    }
+    group_indexes = {
+        event_name: _managed_group_index(
+            hooks["hooks"][event_name],
+            expected_group,
+            marker=markers[event_name],
+        )
+        for event_name, expected_group in state["expected"].items()
+    }
     target_exists = _lexists(state["installed_script"])
     if target_exists:
         installed_hash = _sha256_bytes(
@@ -371,10 +459,12 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
             allowed_hashes.add(manifest["installed_sha256"])
         if installed_hash not in allowed_hashes:
             raise InstallerError("refusing to retire a drifted Context Canvas hook script")
-    changed = group_index is not None or target_exists or manifest is not None
+    changed = any(index is not None for index in group_indexes.values()) or target_exists or manifest is not None
     archived: list[str] = []
-    if group_index is not None:
-        del groups[group_index]
+    for event_name, group_index in group_indexes.items():
+        if group_index is not None:
+            del hooks["hooks"][event_name][group_index]
+    if any(index is not None for index in group_indexes.values()):
         _atomic_write(state["hooks_path"], _json_bytes(hooks))
     archived_target = _archive_owned(
         state["installed_script"], state["install_dir"], "installed Context Canvas hook script"
@@ -398,7 +488,10 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Install, check, or retire the Context Canvas user-level SessionStart hook"
+        description=(
+            "Install, check, or retire the Context Canvas user-level "
+            "SessionStart and PostToolUse hooks"
+        )
     )
     parser.add_argument("action", choices=("install", "check", "uninstall"))
     parser.add_argument("--codex-home", help="Absolute Codex home override for tests or profiles")

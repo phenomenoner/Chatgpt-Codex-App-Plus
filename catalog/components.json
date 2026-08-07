@@ -8,10 +8,10 @@
       "maturity": "beta",
       "requires": [
         "Codex plugin support",
-        "Codex SessionStart through native plugin hooks or the explicit user-hook adapter",
+        "Codex SessionStart and PostToolUse through native plugin hooks or the explicit user-hook adapter",
         "Python 3.11+ available as python"
       ],
-      "summary": "Keep a local, dependency-aware task map with hash-bound evidence pointers, bounded search, closeout, SessionStart recovery, and shared App/CLI MCP tools."
+      "summary": "Keep a semantic task map separate from complete policy-sanitized, content-addressed historical tool snapshots with dedupe, TTL, pinning, bounded MCP metadata, and explicit CLI export."
     },
     {
       "id": "batch-complete-independent-review",
@@ -77,8 +77,8 @@
       "defaultInstall": true,
       "maturity": "stable",
       "requires": [],
-      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
-      "summary": "Choose the smallest reliable subagent topology and enforce exclusive write ownership."
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing",
+      "summary": "Route Codex users to native collaboration tools first, apply the dispatch brake, prefer Luna/max only for eligible bounded work, and keep independent review at Sol/high or a clearly stronger exposed lane."
     },
     {
       "id": "understand-anything",

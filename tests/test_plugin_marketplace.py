@@ -27,7 +27,7 @@ class PluginMarketplaceContractTests(unittest.TestCase):
             (plugin_root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(manifest["name"], "context-canvas-codex")
-        self.assertEqual(manifest["version"], "0.2.0")
+        self.assertEqual(manifest["version"], "0.3.0")
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
 
     def test_context_canvas_mcp_and_hook_commands_stay_inside_plugin(self):
@@ -39,12 +39,19 @@ class PluginMarketplaceContractTests(unittest.TestCase):
         self.assertEqual(server["cwd"], ".")
 
         hooks = json.loads((plugin_root / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(hooks["hooks"]), {"SessionStart"})
+        self.assertEqual(set(hooks["hooks"]), {"SessionStart", "PostToolUse"})
         groups = hooks["hooks"]["SessionStart"]
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0]["matcher"], "^(startup|resume|clear|compact)$")
         command = groups[0]["hooks"][0]["command"]
         self.assertIn("${PLUGIN_ROOT}/scripts/context_canvas.py", command)
+
+        post_tool_groups = hooks["hooks"]["PostToolUse"]
+        self.assertEqual(len(post_tool_groups), 1)
+        self.assertEqual(post_tool_groups[0]["matcher"], ".*")
+        post_tool_command = post_tool_groups[0]["hooks"][0]["command"]
+        self.assertIn("${PLUGIN_ROOT}/scripts/context_canvas.py", post_tool_command)
+        self.assertTrue(post_tool_command.endswith("hook-post-tool-use"))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 {
-  "description": "Read-only Context Canvas recovery on Codex session start or compaction.",
+  "description": "Bounded Context Canvas recovery plus policy-sanitized PostToolUse snapshots.",
   "hooks": {
     "SessionStart": [
       {
@@ -12,6 +12,20 @@
             "timeout": 10,
             "statusMessage": "Restoring bounded task checkpoint",
             "additionalContextLimit": 5000
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"${PLUGIN_ROOT}/scripts/context_canvas.py\" hook-post-tool-use",
+            "commandWindows": "python -I \"$env:PLUGIN_ROOT\\scripts\\context_canvas.py\" hook-post-tool-use",
+            "timeout": 30,
+            "statusMessage": "Archiving sanitized tool snapshot"
           }
         ]
       }
