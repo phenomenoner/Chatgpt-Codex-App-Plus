@@ -1,0 +1,1386 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#f7f2e9">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23171719'/%3E%3Cpath d='M18 38l12-20 5 10 11-2-14 20-5-10z' fill='%23ef6d54'/%3E%3C/svg%3E">
+  <meta name="description" content="給 Codex App user 的 token 壓力解法：Context Canvas、Baton Fanout、Codex CLI Luna Worker seminar page。">
+  <title>Token 不要浪費在繞路上｜Codex App Plus Seminar</title>
+  <style>
+    :root {
+      --paper: #f7f2e9;
+      --paper-2: #fffaf3;
+      --ink: #171719;
+      --muted: #6e685f;
+      --quiet: #9a9388;
+      --line: #d9d0c3;
+      --line-strong: #bfb4a6;
+      --coral: #ef6d54;
+      --coral-deep: #c84e3d;
+      --orange: #f5a260;
+      --violet: #6d59d7;
+      --violet-soft: #e9e3ff;
+      --blue: #5d83d5;
+      --blue-soft: #e7efff;
+      --mint: #75bcae;
+      --mint-soft: #dff1ea;
+      --charcoal: #26252b;
+      --shadow: 0 24px 70px rgba(52, 41, 27, .13);
+      --shadow-sm: 0 10px 28px rgba(52, 41, 27, .10);
+      --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      --mono: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      --ease: cubic-bezier(.22, .78, .24, 1);
+    }
+
+    * { box-sizing: border-box; }
+    html {
+      scroll-behavior: smooth;
+      background: var(--paper);
+    }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 12%, rgba(239,109,84,.08), transparent 24rem),
+        radial-gradient(circle at 92% 65%, rgba(109,89,215,.07), transparent 26rem),
+        var(--paper);
+      font-family: var(--sans);
+      line-height: 1.55;
+      overflow-x: hidden;
+      scroll-snap-type: y proximity;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+      opacity: .22;
+      background-image: radial-gradient(rgba(23,23,25,.14) .55px, transparent .55px);
+      background-size: 5px 5px;
+      mask-image: linear-gradient(to bottom, black, transparent 88%);
+    }
+    ::selection { background: rgba(239,109,84,.25); }
+    a { color: inherit; }
+    button { font: inherit; }
+
+    .topbar {
+      position: fixed;
+      z-index: 20;
+      top: 16px;
+      left: 50%;
+      width: min(1180px, calc(100% - 32px));
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 10px 12px 10px 16px;
+      border: 1px solid rgba(191,180,166,.82);
+      border-radius: 999px;
+      background: rgba(255,250,243,.84);
+      box-shadow: 0 12px 30px rgba(54,43,27,.08);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: opacity .35s ease, transform .35s ease;
+    }
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: .08em;
+    }
+    .brand-mark {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+      color: #fff;
+      background: var(--ink);
+      font-size: 14px;
+      box-shadow: 3px 3px 0 var(--coral);
+    }
+    .brand em { color: var(--coral-deep); font-style: normal; }
+    .topbar-spacer { flex: 1; }
+    .progress-copy {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: .04em;
+      white-space: nowrap;
+    }
+    .progress-copy b { color: var(--ink); }
+    .top-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 7px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--ink);
+      background: rgba(255,255,255,.42);
+      cursor: pointer;
+      transition: transform .2s ease, border-color .2s ease, background .2s ease;
+    }
+    .top-action:hover { transform: translateY(-1px); border-color: var(--ink); background: #fff; }
+    .top-action:focus-visible, .nav-dot:focus-visible, .node:focus-visible, .demo-toggle:focus-visible, .copy-button:focus-visible, .slide-cta:focus-visible {
+      outline: 3px solid rgba(93,131,213,.42);
+      outline-offset: 3px;
+    }
+    .top-action.muted { color: var(--muted); }
+
+    .progress-rail {
+      position: fixed;
+      z-index: 12;
+      top: 50%;
+      right: 22px;
+      display: grid;
+      gap: 10px;
+      transform: translateY(-50%);
+    }
+    .nav-dot {
+      position: relative;
+      width: 12px;
+      height: 12px;
+      padding: 0;
+      border: 1px solid var(--line-strong);
+      border-radius: 50%;
+      background: var(--paper-2);
+      cursor: pointer;
+      transition: transform .25s ease, background .25s ease, border-color .25s ease;
+    }
+    .nav-dot::before {
+      content: attr(aria-label);
+      position: absolute;
+      right: 22px;
+      top: 50%;
+      padding: 3px 7px;
+      border-radius: 5px;
+      color: var(--paper-2);
+      background: var(--charcoal);
+      font-size: 11px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-50%) translateX(4px);
+      transition: opacity .2s ease, transform .2s ease;
+    }
+    .nav-dot:hover::before, .nav-dot.active::before { opacity: 1; transform: translateY(-50%) translateX(0); }
+    .nav-dot.active { border-color: var(--coral); background: var(--coral); transform: scale(1.25); }
+
+    .slide {
+      position: relative;
+      min-height: 100svh;
+      display: flex;
+      align-items: center;
+      padding: 112px max(6vw, 44px) 70px;
+      overflow: hidden;
+      scroll-snap-align: start;
+      scroll-snap-stop: normal;
+      isolation: isolate;
+    }
+    .slide-inner {
+      position: relative;
+      z-index: 1;
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
+    .slide-number {
+      position: absolute;
+      top: 9vh;
+      right: 5vw;
+      z-index: -1;
+      color: rgba(23,23,25,.045);
+      font-family: var(--mono);
+      font-size: clamp(120px, 23vw, 340px);
+      font-weight: 800;
+      line-height: .8;
+      user-select: none;
+    }
+    .kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin-bottom: 18px;
+      color: var(--coral-deep);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+    .kicker::before {
+      content: "";
+      width: 28px;
+      height: 2px;
+      background: currentColor;
+    }
+    .display {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(42px, 6.8vw, 88px);
+      font-weight: 900;
+      letter-spacing: -.055em;
+      line-height: 1.03;
+      text-wrap: balance;
+    }
+    .display em {
+      color: var(--coral-deep);
+      font-style: normal;
+      text-decoration: underline;
+      text-decoration-thickness: .08em;
+      text-decoration-color: rgba(239,109,84,.36);
+      text-underline-offset: .14em;
+    }
+    .display .violet { color: var(--violet); }
+    .display .mint { color: #438f83; }
+    .section-title {
+      max-width: 740px;
+      margin: 0;
+      font-size: clamp(32px, 4.4vw, 60px);
+      font-weight: 900;
+      letter-spacing: -.045em;
+      line-height: 1.08;
+      text-wrap: balance;
+    }
+    .lede {
+      max-width: 680px;
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: clamp(16px, 1.7vw, 20px);
+      line-height: 1.7;
+      text-wrap: pretty;
+    }
+    .fine-print {
+      color: var(--quiet);
+      font-size: 12px;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255,255,255,.42);
+      font-size: 11px;
+      letter-spacing: .04em;
+    }
+    .tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 31px;
+      padding: 5px 10px;
+      border-radius: 7px;
+      color: var(--muted);
+      background: rgba(255,255,255,.55);
+      border: 1px solid var(--line);
+      font-size: 12px;
+    }
+    .tag.coral { color: var(--coral-deep); border-color: rgba(239,109,84,.36); background: rgba(239,109,84,.08); }
+    .tag.violet { color: #5444aa; border-color: rgba(109,89,215,.32); background: rgba(109,89,215,.08); }
+    .tag.mint { color: #36786d; border-color: rgba(117,188,174,.42); background: rgba(117,188,174,.12); }
+    .slide-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 46px;
+      padding: 11px 17px;
+      border: 1px solid var(--ink);
+      border-radius: 10px;
+      color: #fff;
+      background: var(--ink);
+      box-shadow: 5px 5px 0 var(--coral);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .2s ease, box-shadow .2s ease;
+    }
+    .slide-cta:hover { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 var(--coral); }
+    .slide-cta.secondary { color: var(--ink); background: transparent; box-shadow: 4px 4px 0 var(--violet); }
+    .slide-cta.secondary:hover { box-shadow: 6px 6px 0 var(--violet); }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 13px; margin-top: 30px; }
+
+    /* Opening slide */
+    .hero { min-height: 100svh; }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, .9fr) minmax(420px, 1.1fr);
+      gap: clamp(36px, 6vw, 86px);
+      align-items: center;
+    }
+    .hero-copy { padding-top: 10px; }
+    .hero .display { max-width: 710px; }
+    .hero-first-line { white-space: nowrap; }
+    .hero .lede { max-width: 620px; }
+    .hero-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+    .hero-art {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line-strong);
+      border-radius: 23px;
+      background: #f7ebd8;
+      box-shadow: var(--shadow);
+      transform: rotate(1.5deg);
+    }
+    .hero-art::before {
+      content: "";
+      position: absolute;
+      inset: 12px;
+      border: 1px dashed rgba(23,23,25,.22);
+      border-radius: 16px;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .hero-illustration { display: block; width: 100%; height: auto; mix-blend-mode: multiply; }
+    .hero-illustration .ink { stroke: #171719; stroke-linecap: round; stroke-linejoin: round; }
+    .hero-illustration .violet { stroke: #6d59d7; }
+    .hero-illustration .coral { stroke: #ef6d54; }
+    .hero-illustration .paper { fill: #fdf7ed; }
+    .hero-illustration .lavender { fill: #e9e3ff; }
+    .hero-illustration .orange { fill: #f2a28d; }
+    .hero-illustration .yellow { fill: #f5ca69; }
+    .hero-illustration .blue { fill: #9bc9d3; }
+    .art-caption {
+      display: none;
+      position: absolute;
+      left: 20px;
+      right: auto;
+      top: 18px;
+      bottom: auto;
+      z-index: 2;
+      max-width: 230px;
+      padding: 9px 11px;
+      border-radius: 8px;
+      color: var(--ink);
+      background: rgba(255,250,243,.88);
+      border: 1px solid rgba(23,23,25,.18);
+      box-shadow: 4px 4px 0 var(--violet);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .hero-bottom {
+      position: absolute;
+      left: max(6vw, 44px);
+      right: max(6vw, 44px);
+      bottom: 25px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      color: var(--quiet);
+      font-size: 12px;
+    }
+    .hero-bottom strong { color: var(--ink); }
+    .scroll-cue { display: inline-flex; align-items: center; gap: 8px; font-family: var(--mono); }
+    .scroll-cue span { display: inline-block; width: 28px; height: 1px; background: var(--line-strong); }
+
+    /* Problem slide */
+    .problem-grid {
+      display: grid;
+      grid-template-columns: minmax(0, .75fr) minmax(450px, 1.25fr);
+      gap: clamp(42px, 7vw, 100px);
+      align-items: center;
+    }
+    .quote-card {
+      position: relative;
+      padding: 28px 28px 25px;
+      border: 1px solid var(--line-strong);
+      border-radius: 17px;
+      background: var(--paper-2);
+      box-shadow: 9px 9px 0 var(--violet-soft);
+    }
+    .quote-mark { color: var(--coral); font-size: 62px; font-weight: 900; line-height: .6; }
+    .quote-card p { margin: 15px 0 0; font-size: clamp(21px, 2.4vw, 32px); font-weight: 850; letter-spacing: -.04em; line-height: 1.23; }
+    .quote-card small { display: block; margin-top: 19px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .pressure-stack { display: grid; gap: 12px; }
+    .pressure-track {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+      align-items: center;
+    }
+    .pressure-step {
+      position: relative;
+      min-height: 116px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: rgba(255,255,255,.5);
+    }
+    .pressure-step::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -15px;
+      z-index: 1;
+      color: var(--quiet);
+      font-size: 18px;
+      transform: translateY(-50%);
+    }
+    .pressure-step:last-child::after { display: none; }
+    .pressure-step.hot { border-color: rgba(239,109,84,.55); background: rgba(239,109,84,.09); }
+    .pressure-step.hot strong { color: var(--coral-deep); }
+    .pressure-step .step-no { color: var(--quiet); font-family: var(--mono); font-size: 11px; }
+    .pressure-step strong { font-size: 14px; line-height: 1.25; }
+    .pressure-step span { color: var(--muted); font-size: 11px; line-height: 1.35; }
+    .pressure-note {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 13px 15px;
+      border-left: 3px solid var(--coral);
+      color: var(--muted);
+      background: rgba(255,255,255,.5);
+      font-size: 13px;
+    }
+    .pressure-note b { color: var(--ink); }
+
+    /* Tool overview */
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 42px;
+    }
+    .tool-card {
+      position: relative;
+      min-height: 310px;
+      display: flex;
+      flex-direction: column;
+      padding: 23px;
+      border: 1px solid var(--line-strong);
+      border-radius: 17px;
+      background: var(--paper-2);
+      box-shadow: 6px 6px 0 var(--tool-shadow, rgba(23,23,25,.07));
+      transition: transform .25s var(--ease), box-shadow .25s var(--ease);
+    }
+    .tool-card:hover { transform: translateY(-6px) rotate(-.3deg); box-shadow: 10px 12px 0 var(--tool-shadow, rgba(23,23,25,.1)); }
+    .tool-card.canvas { --tool: var(--coral); --tool-shadow: rgba(239,109,84,.22); }
+    .tool-card.baton { --tool: var(--violet); --tool-shadow: rgba(109,89,215,.2); }
+    .tool-card.luna { --tool: var(--mint); --tool-shadow: rgba(117,188,174,.28); }
+    .tool-index { color: var(--tool); font-family: var(--mono); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+    .tool-icon {
+      display: grid;
+      place-items: center;
+      width: 51px;
+      height: 51px;
+      margin: 19px 0 18px;
+      border: 1px solid color-mix(in srgb, var(--tool) 45%, var(--line));
+      border-radius: 14px;
+      color: var(--tool);
+      background: color-mix(in srgb, var(--tool) 12%, white);
+      font-size: 25px;
+    }
+    .tool-card h3 { margin: 0; font-size: 21px; letter-spacing: -.035em; line-height: 1.15; }
+    .tool-name { margin-top: 5px; color: var(--tool); font-family: var(--mono); font-size: 11px; }
+    .tool-card p { margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.62; }
+    .tool-outcome { display: inline-flex; gap: 7px; align-items: center; margin-top: auto; padding-top: 22px; color: var(--ink); font-size: 12px; font-weight: 800; }
+    .tool-outcome::before { content: "↳"; color: var(--tool); font-size: 17px; }
+
+    /* Context Canvas */
+    .canvas-grid {
+      display: grid;
+      grid-template-columns: minmax(310px, .86fr) minmax(480px, 1.14fr);
+      gap: clamp(38px, 6vw, 90px);
+      align-items: center;
+      margin-top: 32px;
+    }
+    .principle-list { display: grid; gap: 13px; margin-top: 27px; }
+    .principle-item {
+      display: grid;
+      grid-template-columns: 35px 1fr;
+      gap: 12px;
+      align-items: start;
+    }
+    .principle-item .num {
+      display: grid;
+      place-items: center;
+      width: 29px;
+      height: 29px;
+      border: 1px solid rgba(239,109,84,.42);
+      border-radius: 9px;
+      color: var(--coral-deep);
+      background: rgba(239,109,84,.1);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .principle-item strong { display: block; margin-bottom: 2px; font-size: 15px; }
+    .principle-item span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .canvas-note {
+      margin-top: 22px;
+      padding: 12px 14px;
+      border: 1px dashed rgba(239,109,84,.55);
+      border-radius: 9px;
+      color: var(--muted);
+      background: rgba(239,109,84,.055);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .canvas-note b { color: var(--coral-deep); }
+    .map-board {
+      position: relative;
+      min-height: 430px;
+      overflow: hidden;
+      padding: 25px;
+      border: 1px solid var(--line-strong);
+      border-radius: 20px;
+      background:
+        linear-gradient(rgba(239,109,84,.07) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(239,109,84,.07) 1px, transparent 1px),
+        var(--paper-2);
+      background-size: 30px 30px;
+      box-shadow: var(--shadow-sm);
+    }
+    .map-board::before {
+      content: "CONTEXT CANVAS / TASK MAP";
+      position: absolute;
+      top: 14px;
+      left: 18px;
+      color: rgba(23,23,25,.38);
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: .09em;
+    }
+    .maze {
+      position: absolute;
+      inset: 75px 28px 42px;
+      opacity: .58;
+      background:
+        linear-gradient(90deg, transparent 0 9%, var(--line-strong) 9% 10%, transparent 10% 26%, var(--line-strong) 26% 27%, transparent 27% 48%, var(--line-strong) 48% 49%, transparent 49% 68%, var(--line-strong) 68% 69%, transparent 69% 88%, var(--line-strong) 88% 89%, transparent 89%),
+        linear-gradient(0deg, transparent 0 18%, var(--line-strong) 18% 19%, transparent 19% 39%, var(--line-strong) 39% 40%, transparent 40% 61%, var(--line-strong) 61% 62%, transparent 62% 81%, var(--line-strong) 81% 82%, transparent 82%);
+      mask-image: radial-gradient(ellipse at center, black 35%, transparent 85%);
+    }
+    .route {
+      position: absolute;
+      inset: 79px 54px 63px;
+      pointer-events: none;
+    }
+    .route path { fill: none; stroke: var(--coral); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 9 10; opacity: .92; }
+    .map-label {
+      position: absolute;
+      padding: 5px 8px;
+      border: 1px solid rgba(23,23,25,.2);
+      border-radius: 6px;
+      color: var(--muted);
+      background: rgba(255,250,243,.9);
+      font-family: var(--mono);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+    .map-label.goal { top: 58px; right: 40px; color: var(--coral-deep); border-color: rgba(239,109,84,.4); }
+    .map-label.ref { top: 58px; left: 40px; color: #5444aa; border-color: rgba(109,89,215,.35); }
+    .node {
+      position: absolute;
+      z-index: 2;
+      min-width: 105px;
+      padding: 10px 11px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      color: var(--ink);
+      background: rgba(255,250,243,.94);
+      box-shadow: 3px 3px 0 rgba(23,23,25,.08);
+      text-align: left;
+      cursor: pointer;
+      transition: transform .25s var(--ease), border-color .25s ease, box-shadow .25s ease;
+    }
+    .node:hover, .node.active { transform: translateY(-3px) rotate(-1deg); border-color: var(--coral); box-shadow: 4px 5px 0 rgba(239,109,84,.26); }
+    .node .node-kind { display: block; color: var(--quiet); font-family: var(--mono); font-size: 10px; }
+    .node strong { display: block; margin-top: 2px; font-size: 13px; }
+    .node.goal { top: 105px; left: 34px; }
+    .node.finding { top: 202px; left: 37%; }
+    .node.verify { top: 305px; right: 38px; }
+    .node.blocked { top: 290px; left: 37px; opacity: .74; }
+    .map-status {
+      position: absolute;
+      right: 25px;
+      bottom: 16px;
+      left: 25px;
+      min-height: 39px;
+      padding: 8px 11px;
+      border-top: 1px dashed var(--line-strong);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .map-status b { color: var(--coral-deep); }
+
+    /* Baton */
+    .baton-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(450px, .94fr);
+      gap: clamp(44px, 7vw, 105px);
+      align-items: center;
+      margin-top: 36px;
+    }
+    .config-card {
+      margin-top: 26px;
+      padding: 17px;
+      border: 1px solid var(--line-strong);
+      border-radius: 14px;
+      background: var(--charcoal);
+      color: #fff;
+      box-shadow: 8px 8px 0 var(--violet-soft);
+    }
+    .config-card .config-label { color: #bdb7cb; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; }
+    .config-lines { display: grid; gap: 9px; margin-top: 12px; }
+    .config-line { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.1); }
+    .config-line:last-child { padding-bottom: 0; border-bottom: 0; }
+    .config-line code { color: #fff; font-family: var(--mono); font-size: 12px; }
+    .config-line span { color: #c5bed7; font-size: 11px; text-align: right; }
+    .build-site {
+      position: relative;
+      min-height: 455px;
+      padding: 25px 21px 21px;
+      border: 1px solid var(--line-strong);
+      border-radius: 20px;
+      background: var(--paper-2);
+      box-shadow: var(--shadow-sm);
+    }
+    .build-site::before { content: "BATON / DISPATCH BRAKE"; color: rgba(23,23,25,.38); font-family: var(--mono); font-size: 10px; letter-spacing: .09em; }
+    .foreman {
+      display: grid;
+      grid-template-columns: 67px 1fr;
+      gap: 13px;
+      align-items: center;
+      width: min(290px, 100%);
+      margin: 22px auto 24px;
+      padding: 12px;
+      border: 1px solid rgba(109,89,215,.42);
+      border-radius: 13px;
+      background: var(--violet-soft);
+    }
+    .foreman-avatar { display: grid; place-items: center; width: 57px; height: 57px; border-radius: 50%; color: #fff; background: var(--violet); font-size: 27px; }
+    .foreman strong { display: block; font-size: 14px; }
+    .foreman span { display: block; margin-top: 3px; color: #5d5391; font-size: 11px; }
+    .dispatch-line { position: relative; height: 23px; margin: 0 39px 12px; border-top: 2px dashed var(--violet); }
+    .dispatch-line::after { content: ""; position: absolute; left: 50%; top: -8px; width: 14px; height: 14px; border-right: 2px solid var(--violet); border-bottom: 2px solid var(--violet); transform: rotate(45deg) translateX(-50%); }
+    .worker-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+    .worker {
+      min-height: 165px;
+      display: flex;
+      flex-direction: column;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.58);
+      transition: transform .25s ease, border-color .25s ease;
+    }
+    .worker:hover { transform: translateY(-4px); border-color: var(--violet); }
+    .worker .helmet { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; color: #fff; background: var(--worker-color, var(--coral)); font-size: 18px; }
+    .worker strong { margin-top: 10px; font-size: 13px; }
+    .worker span { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.42; }
+    .worker .status { margin-top: auto; color: var(--worker-color, var(--coral)); font-family: var(--mono); font-size: 10px; }
+    .site-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; padding-top: 12px; border-top: 1px dashed var(--line-strong); color: var(--muted); font-size: 12px; }
+    .site-footer b { color: var(--ink); }
+    .baton-checks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin-top: 26px; }
+    .baton-check { min-height: 76px; padding: 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.48); font-size: 11px; line-height: 1.4; }
+    .baton-check b { display: block; margin-bottom: 4px; color: var(--violet); font-family: var(--mono); font-size: 10px; }
+
+    /* Luna */
+    .luna-layout {
+      display: grid;
+      grid-template-columns: minmax(450px, .95fr) minmax(0, 1.05fr);
+      gap: clamp(42px, 7vw, 102px);
+      align-items: center;
+      margin-top: 37px;
+    }
+    .bridge-board {
+      position: relative;
+      min-height: 390px;
+      padding: 25px 25px 22px;
+      border: 1px solid var(--line-strong);
+      border-radius: 20px;
+      background: var(--charcoal);
+      color: #fff;
+      box-shadow: 10px 10px 0 var(--mint-soft);
+    }
+    .bridge-board::before { content: "BOUNDED WORKER / READ-ONLY"; color: #8da69f; font-family: var(--mono); font-size: 10px; letter-spacing: .09em; }
+    .bridge-track { display: grid; grid-template-columns: 1fr 35px 1fr 35px 1fr; gap: 8px; align-items: center; margin-top: 48px; }
+    .bridge-box { min-height: 155px; display: flex; flex-direction: column; justify-content: center; padding: 14px; border: 1px solid rgba(255,255,255,.18); border-radius: 12px; background: rgba(255,255,255,.06); }
+    .bridge-box.highlight { border-color: rgba(117,188,174,.68); background: rgba(117,188,174,.12); }
+    .bridge-box .tiny { color: #8da69f; font-family: var(--mono); font-size: 10px; }
+    .bridge-box strong { display: block; margin-top: 9px; font-size: 15px; line-height: 1.24; }
+    .bridge-box span { display: block; margin-top: 8px; color: #b9b6b2; font-size: 11px; line-height: 1.45; }
+    .bridge-arrow { color: var(--mint); font-size: 22px; text-align: center; }
+    .bridge-return { display: flex; align-items: center; gap: 8px; margin-top: 26px; padding: 10px 12px; border: 1px dashed rgba(117,188,174,.42); border-radius: 9px; color: #c2ded8; font-size: 12px; }
+    .bridge-return b { color: #fff; }
+    .luna-steps { display: grid; gap: 14px; margin-top: 25px; }
+    .luna-step { display: grid; grid-template-columns: 35px 1fr; gap: 12px; align-items: start; }
+    .luna-step .num { display: grid; place-items: center; width: 29px; height: 29px; border: 1px solid rgba(117,188,174,.55); border-radius: 9px; color: #3b897d; background: var(--mint-soft); font-family: var(--mono); font-size: 11px; font-weight: 800; }
+    .luna-step strong { display: block; font-size: 15px; }
+    .luna-step span { display: block; margin-top: 2px; color: var(--muted); font-size: 13px; line-height: 1.48; }
+    .safety-strip { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 23px; }
+    .safety-strip span { padding: 6px 8px; border-radius: 6px; color: #36786d; background: var(--mint-soft); font-family: var(--mono); font-size: 10px; }
+
+    /* Combined demo */
+    .demo-head { display: flex; align-items: end; justify-content: space-between; gap: 22px; }
+    .demo-head .fine-print { max-width: 270px; text-align: right; }
+    .demo-shell {
+      margin-top: 35px;
+      padding: 19px;
+      border: 1px solid var(--line-strong);
+      border-radius: 18px;
+      background: var(--paper-2);
+      box-shadow: var(--shadow-sm);
+    }
+    .demo-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap; padding-bottom: 15px; border-bottom: 1px solid var(--line); }
+    .demo-toggles { display: flex; gap: 7px; flex-wrap: wrap; }
+    .demo-toggle { min-height: 34px; padding: 7px 11px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer; transition: color .2s ease, background .2s ease, border-color .2s ease; }
+    .demo-toggle.active { color: #fff; border-color: var(--ink); background: var(--ink); }
+    .demo-play { min-height: 34px; padding: 7px 13px; border: 1px solid var(--coral); border-radius: 8px; color: var(--coral-deep); background: rgba(239,109,84,.09); cursor: pointer; font-weight: 800; }
+    .demo-play:hover { color: #fff; background: var(--coral); }
+    .demo-body { display: grid; grid-template-columns: minmax(0, 1.22fr) minmax(260px, .78fr); gap: 24px; padding-top: 22px; }
+    .demo-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; align-items: stretch; }
+    .demo-step { position: relative; min-height: 145px; padding: 13px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.52); opacity: .55; transition: opacity .35s ease, transform .35s var(--ease), border-color .35s ease, background .35s ease; }
+    .demo-step::after { content: ""; position: absolute; top: 52%; right: -9px; width: 12px; height: 1px; background: var(--line-strong); }
+    .demo-step:last-child::after { display: none; }
+    .demo-step.active { opacity: 1; transform: translateY(-4px); border-color: var(--coral); background: rgba(239,109,84,.09); }
+    .demo-step.done { opacity: .9; border-color: rgba(117,188,174,.65); background: rgba(117,188,174,.10); }
+    .demo-step .num { color: var(--quiet); font-family: var(--mono); font-size: 11px; }
+    .demo-step strong { display: block; margin-top: 22px; font-size: 14px; line-height: 1.25; }
+    .demo-step span { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .demo-message { min-height: 210px; padding: 17px; border: 1px solid var(--line); border-radius: 12px; background: var(--charcoal); color: #fff; }
+    .demo-message .message-label { color: var(--orange); font-family: var(--mono); font-size: 10px; letter-spacing: .1em; }
+    .demo-message h3 { margin: 14px 0 8px; font-size: 20px; letter-spacing: -.035em; }
+    .demo-message p { margin: 0; color: #c8c3bd; font-size: 13px; line-height: 1.62; }
+    .demo-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 17px; }
+    .demo-stat { padding: 9px 10px; border: 1px solid rgba(255,255,255,.13); border-radius: 8px; background: rgba(255,255,255,.05); }
+    .demo-stat span { display: block; color: #9c9791; font-size: 10px; }
+    .demo-stat b { display: block; margin-top: 3px; color: #fff; font-size: 14px; }
+    .demo-disclaimer { margin: 13px 0 0; color: var(--quiet); font-size: 11px; }
+
+    /* CTA */
+    .cta-slide { min-height: 100svh; }
+    .cta-layout { display: grid; grid-template-columns: minmax(0, .83fr) minmax(460px, 1.17fr); gap: clamp(42px, 7vw, 105px); align-items: center; }
+    .cta-copy .section-title { max-width: 560px; }
+    .cta-copy .lede { max-width: 500px; }
+    .prompt-card { overflow: hidden; border: 1px solid var(--ink); border-radius: 18px; background: var(--charcoal); color: #fff; box-shadow: 10px 10px 0 var(--coral); }
+    .prompt-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,.14); }
+    .prompt-top span { color: #bcb6af; font-family: var(--mono); font-size: 10px; letter-spacing: .1em; }
+    .copy-button { min-height: 33px; padding: 6px 10px; border: 1px solid rgba(255,255,255,.25); border-radius: 7px; color: #fff; background: rgba(255,255,255,.08); cursor: pointer; font-size: 12px; }
+    .copy-button:hover { background: rgba(255,255,255,.16); }
+    .prompt-text { margin: 0; padding: 23px 21px 25px; color: #fffaf3; font-family: var(--mono); font-size: clamp(14px, 1.45vw, 17px); line-height: 1.78; white-space: pre-wrap; }
+    .prompt-url { color: #f1b1a6; }
+    .cta-links { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 24px; color: var(--muted); font-size: 12px; }
+    .cta-links a { text-decoration: none; border-bottom: 1px solid var(--line-strong); }
+    .cta-links a:hover { color: var(--coral-deep); border-color: var(--coral); }
+    .tip-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 24px; }
+    .tip-card { padding: 13px 14px; border: 1px solid var(--line); border-radius: 11px; background: rgba(255,255,255,.48); }
+    .tip-card .tip-label { color: var(--coral-deep); font-family: var(--mono); font-size: 10px; font-weight: 800; letter-spacing: .08em; }
+    .tip-card strong { display: block; margin-top: 7px; font-size: 14px; line-height: 1.25; }
+    .tip-card p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+    .closing-lines { display: grid; gap: 11px; margin-top: 27px; }
+    .closing-line { display: flex; gap: 9px; align-items: baseline; color: var(--muted); font-size: 14px; }
+    .closing-line b { color: var(--ink); }
+    .closing-line i { color: var(--coral); font-style: normal; }
+    .footer-note { position: absolute; right: max(6vw, 44px); bottom: 24px; left: max(6vw, 44px); display: flex; align-items: center; justify-content: space-between; gap: 15px; color: var(--quiet); font-size: 11px; }
+
+    .slide.is-active .kicker, .slide.is-active .display, .slide.is-active .section-title, .slide.is-active .lede, .slide.is-active .tool-card, .slide.is-active .quote-card, .slide.is-active .pressure-step, .slide.is-active .map-board, .slide.is-active .build-site, .slide.is-active .bridge-board, .slide.is-active .demo-shell, .slide.is-active .prompt-card {
+      animation: rise-in .75s var(--ease) both;
+    }
+    .slide.is-active .section-title { animation-delay: .05s; }
+    .slide.is-active .lede { animation-delay: .12s; }
+    .slide.is-active .tool-card:nth-child(2), .slide.is-active .pressure-step:nth-child(2) { animation-delay: .08s; }
+    .slide.is-active .tool-card:nth-child(3), .slide.is-active .pressure-step:nth-child(3) { animation-delay: .16s; }
+    .slide.is-active .pressure-step:nth-child(4) { animation-delay: .24s; }
+    .slide.is-active .pressure-step:nth-child(5) { animation-delay: .32s; }
+    @keyframes rise-in { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: translateY(0); } }
+    .slide.is-active .hero-art { animation: art-in .9s var(--ease) .1s both; }
+    @keyframes art-in { from { opacity: 0; transform: translateY(22px) rotate(4deg); } to { opacity: 1; transform: translateY(0) rotate(1.5deg); } }
+    .presentation-clean .topbar { opacity: 0; transform: translate(-50%, -130%); pointer-events: none; }
+    .presentation-clean .progress-rail { opacity: 0; pointer-events: none; }
+
+    @media (max-width: 980px) {
+      .hero-grid, .problem-grid, .canvas-grid, .baton-layout, .luna-layout, .cta-layout { grid-template-columns: 1fr; }
+      .hero-grid { gap: 35px; }
+      .hero-art { max-width: 760px; width: 100%; margin: 0 auto; }
+      .hero-bottom { position: static; margin-top: 28px; }
+      .slide { align-items: flex-start; }
+      .slide-inner { margin-top: 16px; }
+      .canvas-grid, .baton-layout, .luna-layout { margin-top: 29px; }
+      .tool-grid { grid-template-columns: repeat(3, minmax(210px, 1fr)); overflow-x: auto; padding-bottom: 8px; }
+      .tool-card { min-width: 220px; }
+      .cta-layout { gap: 36px; }
+    }
+    @media (max-width: 700px) {
+      .topbar { top: 9px; width: calc(100% - 18px); gap: 8px; padding-left: 10px; }
+      .brand { font-size: 10px; letter-spacing: .04em; }
+      .brand-mark { width: 24px; height: 24px; border-radius: 7px; font-size: 12px; }
+      .progress-copy { display: none; }
+      .top-action { min-height: 29px; padding: 5px 8px; font-size: 11px; }
+      .progress-rail { display: none; }
+      .slide { min-height: auto; padding: 104px 20px 68px; }
+      .hero { min-height: 100svh; display: block; }
+      .hero-bottom { display: grid; width: 100%; gap: 9px; margin-top: 22px; }
+      .display { font-size: clamp(39px, 13vw, 61px); }
+      .section-title { font-size: clamp(31px, 10vw, 50px); }
+      .lede { font-size: 16px; }
+      .problem-grid { gap: 30px; }
+      .pressure-track { grid-template-columns: 1fr; gap: 8px; }
+      .pressure-step { min-height: 82px; }
+      .pressure-step::after { content: "↓"; top: auto; right: 50%; bottom: -15px; transform: translateX(50%); }
+      .pressure-step:last-child::after { display: none; }
+      .tool-grid { grid-template-columns: 1fr; overflow: visible; }
+      .tool-card { min-height: auto; }
+      .map-board, .build-site, .bridge-board { min-height: 400px; }
+      .map-board { width: 100%; transform: none; }
+      .node { min-width: 91px; }
+      .node.finding { left: 32%; }
+      .node.verify { right: 22px; }
+      .baton-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .worker-row { grid-template-columns: 1fr; }
+      .worker { min-height: 112px; }
+      .worker .status { margin-top: 12px; }
+      .bridge-track { grid-template-columns: 1fr; gap: 8px; }
+      .bridge-arrow { transform: rotate(90deg); }
+      .bridge-box { min-height: 100px; }
+      .demo-head { display: block; }
+      .demo-head .fine-print { max-width: none; margin-top: 12px; text-align: left; }
+      .demo-body { grid-template-columns: 1fr; }
+      .demo-steps { grid-template-columns: 1fr 1fr; }
+      .demo-step::after { display: none; }
+      .tip-grid { grid-template-columns: 1fr; }
+      .cta-layout { grid-template-columns: 1fr; }
+      .prompt-text { font-size: 12px; }
+      .footer-note { position: static; display: block; margin-top: 32px; }
+      .footer-note span { display: block; margin-top: 7px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar" aria-label="seminar controls">
+    <div class="brand"><span class="brand-mark">✦</span><span>CODEX APP <em>PLUS</em></span></div>
+    <div class="topbar-spacer"></div>
+    <div class="progress-copy" aria-live="polite">SLIDE <b id="slideCurrent">01</b> / <span id="slideTotal">07</span></div>
+    <button class="top-action muted" id="cleanMode" type="button" title="按 P 也可以切換演講模式">演講模式</button>
+    <button class="top-action" id="fullscreen" type="button">全螢幕</button>
+  </header>
+
+  <nav class="progress-rail" aria-label="投影片導覽" id="progressRail"></nav>
+
+  <main>
+    <section class="slide hero" id="slide-1" data-label="開場">
+      <span class="slide-number">01</span>
+      <div class="slide-inner hero-grid">
+        <div class="hero-copy">
+          <div class="kicker">Codex App user seminar</div>
+          <div class="tag-row">
+            <span class="pill">3 tools · 1 workflow</span>
+            <span class="pill">給正在開發的人</span>
+          </div>
+          <h1 class="display" style="margin-top:24px;"><span class="hero-first-line">Token 很貴，</span><br><em>不要讓 agent 一直繞路。</em></h1>
+          <p class="lede">開發做到一半，最痛的不是 agent 不會做；是它忘了自己做過什麼、每個小工都重讀一遍、明明可以並行卻全部排隊。這場 seminar 用三個工具，把昂貴的脈絡留給真正需要思考的地方。</p>
+          <div class="cta-row">
+            <a class="slide-cta" href="#slide-2">先看痛點 <span>↓</span></a>
+            <a class="slide-cta secondary" href="https://github.com/phenomenoner/Chatgpt-Codex-App-Plus" target="_blank" rel="noopener">開啟工具箱 ↗</a>
+          </div>
+          <div class="hero-meta">
+            <span class="tag coral">少重讀</span>
+            <span class="tag violet">少重複</span>
+            <span class="tag mint">多平行</span>
+          </div>
+        </div>
+        <figure class="hero-art">
+          <svg class="hero-illustration" viewBox="0 0 760 520" role="img" aria-label="AI agent 拿著地圖走出迷宮，右側有三個工班平行施工，最後把成果交回監工驗收。">
+            <defs>
+              <marker id="hero-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef6d54"></path>
+              </marker>
+            </defs>
+            <rect width="760" height="520" fill="#f7ebd8"></rect>
+            <path d="M42 91H718M42 428H718" stroke="#171719" stroke-opacity=".12" stroke-width="2" stroke-dasharray="7 11"></path>
+            <path class="ink violet" d="M76 350V121H268V184H177V268H355V111H505" fill="none" stroke-width="14"></path>
+            <path class="ink coral" d="M505 111C554 111 558 166 597 166C635 166 640 220 675 220" fill="none" stroke-width="8" marker-end="url(#hero-arrow)"></path>
+            <path class="ink coral" d="M355 268C416 268 416 263 467 263" fill="none" stroke-width="7" marker-end="url(#hero-arrow)"></path>
+            <circle cx="76" cy="350" r="18" class="paper ink" stroke-width="4"></circle>
+            <circle cx="505" cy="111" r="20" class="orange ink" stroke-width="4"></circle>
+            <g transform="translate(74 210)">
+              <path class="lavender ink" d="M13 23C13 10 23 0 36 0H119C132 0 142 10 142 23V96C142 109 132 119 119 119H36C23 119 13 109 13 96Z" stroke-width="5"></path>
+              <path class="paper ink" d="M39 23H116C123 23 129 29 129 36V73C129 80 123 86 116 86H39C32 86 26 80 26 73V36C26 29 32 23 39 23Z" stroke-width="4"></path>
+              <circle cx="59" cy="55" r="8" fill="#171719"></circle>
+              <circle cx="105" cy="55" r="8" fill="#171719"></circle>
+              <path class="ink coral" d="M61 102C73 111 87 111 99 102" fill="none" stroke-width="5"></path>
+              <path class="ink" d="M78 0V-24M78-24L69-34M78-24L87-34" fill="none" stroke-width="5"></path>
+            </g>
+            <g transform="translate(468 151)">
+              <rect x="0" y="0" width="202" height="92" rx="16" class="paper ink" stroke-width="4"></rect>
+              <rect x="20" y="22" width="52" height="47" rx="8" class="orange ink" stroke-width="3"></rect>
+              <path class="ink" d="M33 54H59M46 38V65" fill="none" stroke-width="4"></path>
+              <path class="ink violet" d="M93 28H178M93 48H162M93 68H145" fill="none" stroke-width="7"></path>
+            </g>
+            <g transform="translate(438 260)">
+              <rect x="0" y="0" width="202" height="92" rx="16" class="paper ink" stroke-width="4"></rect>
+              <rect x="20" y="22" width="52" height="47" rx="8" class="yellow ink" stroke-width="3"></rect>
+              <path class="ink" d="M33 34H59M33 49H59M33 64H59" fill="none" stroke-width="4"></path>
+              <path class="ink coral" d="M93 28H178M93 48H162M93 68H145" fill="none" stroke-width="7"></path>
+            </g>
+            <g transform="translate(487 369)">
+              <rect x="0" y="0" width="202" height="92" rx="16" class="paper ink" stroke-width="4"></rect>
+              <rect x="20" y="22" width="52" height="47" rx="8" class="blue ink" stroke-width="3"></rect>
+              <path class="ink" d="M34 48L44 58L60 35" fill="none" stroke-width="5"></path>
+              <path class="ink violet" d="M93 28H178M93 48H162M93 68H145" fill="none" stroke-width="7"></path>
+            </g>
+            <path class="ink" d="M196 399H344V450H196Z" fill="#e9e3ff" stroke-width="4"></path>
+            <path class="ink" d="M212 399V373H249V399M264 399V358H301V399M316 399V379H344V399" fill="none" stroke-width="4"></path>
+            <circle cx="207" cy="408" r="7" fill="#ef6d54"></circle>
+            <path class="ink coral" d="M350 453C400 477 440 480 490 454" fill="none" stroke-width="6" marker-end="url(#hero-arrow)"></path>
+          </svg>
+          <figcaption class="art-caption">地圖先留路徑，工班再分頭施工，最後由主 agent 驗收。</figcaption>
+        </figure>
+      </div>
+      <div class="hero-bottom">
+        <span><strong>今天的主題：</strong>把 token 花在產出，不要花在迷路。</span>
+        <span class="scroll-cue"><span></span>往下或按 →</span>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-2" data-label="痛點">
+      <span class="slide-number">02</span>
+      <div class="slide-inner problem-grid">
+        <div>
+          <div class="kicker">The pressure is real</div>
+          <h2 class="section-title">你感受到的 token 壓力，很多時候不是功能太多。</h2>
+          <p class="lede">而是 agent 一直在付「重新找路」的費用：重新讀工具輸出、重新確認已做過的決定、重新把同一份背景交給另一個 worker。</p>
+          <div class="quote-card" style="margin-top:28px;">
+            <div class="quote-mark">“</div>
+            <p>長任務不是一篇 transcript；它其實是一條走過的路。</p>
+            <small>如果只留下結論，下一次 resume / compaction 後，agent 仍可能忘記「為什麼會走到這裡」。</small>
+          </div>
+        </div>
+        <div class="pressure-stack">
+          <div class="pressure-track" aria-label="開發時常見的脈絡重複流程">
+            <div class="pressure-step"><span class="step-no">01 / INPUT</span><strong>開始做任務</strong><span>目標、限制、要改哪裡</span></div>
+            <div class="pressure-step hot"><span class="step-no">02 / OUTPUT</span><strong>工具吐出很多東西</strong><span>log、diff、測試結果</span></div>
+            <div class="pressure-step hot"><span class="step-no">03 / COMPACT</span><strong>脈絡被壓縮</strong><span>只剩下模糊印象</span></div>
+            <div class="pressure-step hot"><span class="step-no">04 / REREAD</span><strong>再走一次</strong><span>重新找證據、重新確認</span></div>
+            <div class="pressure-step"><span class="step-no">05 / LOOP</span><strong>token 又花一輪</strong><span>真正的實作反而更慢</span></div>
+          </div>
+          <div class="pressure-note"><b>核心洞察</b><span>不是叫 agent「記住全部」，而是讓它知道：目前走到哪裡、證據放在哪裡、下一步該做什麼。</span></div>
+          <div class="tag-row">
+            <span class="tag coral">脈絡重複</span>
+            <span class="tag coral">同工重讀</span>
+            <span class="tag violet">平行機會消失</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-3" data-label="三個工具">
+      <span class="slide-number">03</span>
+      <div class="slide-inner">
+        <div class="kicker">The toolkit in one picture</div>
+        <h2 class="section-title">三個工具，不是三個零件。<br><span class="violet">是一條比較省力的工作流。</span></h2>
+        <p class="lede">先把路線留下，再決定要不要分工；要分工時，叫一個真正能動手、但不搶走主 agent 最終判斷權的 worker。</p>
+        <div class="tool-grid">
+          <article class="tool-card canvas">
+            <div class="tool-index">01 / MAP</div>
+            <div class="tool-icon">⌁</div>
+            <h3>任務地圖</h3>
+            <div class="tool-name">context-canvas-codex</div>
+            <p>把目標、決策、依賴、blocker 與驗證節點留在本機；大塊證據用指標回到原始檔案，不用每次重新翻整段 scrollback。</p>
+            <div class="tool-outcome">少走冤枉路</div>
+          </article>
+          <article class="tool-card baton">
+            <div class="tool-index">02 / DISPATCH</div>
+            <div class="tool-icon">⌘</div>
+            <h3>工班調度器</h3>
+            <div class="tool-name">baton-fanout-skill</div>
+            <p>不是看到大任務就亂派 worker；先判斷獨立性、寫入所有權與收尾方式，再用最小可靠拓撲平行施工。</p>
+            <div class="tool-outcome">少做無效分工</div>
+          </article>
+          <article class="tool-card luna">
+            <div class="tool-index">03 / BRIDGE</div>
+            <div class="tool-icon">↗</div>
+            <h3>Luna 工班通道</h3>
+            <div class="tool-name">codex-cli-luna-worker</div>
+            <p>當原生協作介面沒有 Luna 時，用唯讀的 Codex CLI worker 產生 bounded patch proposal，再由主 agent review、套用、驗證。</p>
+            <div class="tool-outcome">讓工班真的可用</div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-4" data-label="Context Canvas">
+      <span class="slide-number">04</span>
+      <div class="slide-inner">
+        <div class="kicker">01 / Context Canvas Codex</div>
+        <h2 class="section-title">給 agent 一張<br><em>會留證據的任務地圖。</em></h2>
+        <div class="canvas-grid">
+          <div>
+            <p class="lede" style="margin-top:0;">把 agent 想成在走迷宮：走著走著，可能忘記自己已經探索過哪一條路。地圖把「目前的形狀」留在手邊，讓它更快回到正確路線。</p>
+            <div class="principle-list">
+              <div class="principle-item"><div class="num">1</div><div><strong>Keep the shape</strong><span>留下目標、決策、依賴與下一步，不把整本日記塞回腦袋。</span></div></div>
+              <div class="principle-item"><div class="num">2</div><div><strong>Keep the receipts</strong><span>短摘要指回原始 diff、測試或研究結果；需要時再回去看證據。</span></div></div>
+              <div class="principle-item"><div class="num">3</div><div><strong>Resume with a route</strong><span>遇到 resume、compact、handoff，不用從零猜「我們做到哪裡」。</span></div></div>
+            </div>
+            <div class="canvas-note"><b>好懂的比喻：</b>像網頁 cache 一樣，熟悉的地形不用每次重新勘探；但真正的證據仍留在原始檔案，不把所有內容硬塞進記憶。</div>
+          </div>
+          <div class="map-board" aria-label="Context Canvas 任務地圖互動示意">
+            <div class="maze" aria-hidden="true"></div>
+            <svg class="route" viewBox="0 0 600 340" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M48 55 C118 30, 118 132, 210 116 S276 86, 332 154 S420 218, 548 184"></path>
+            </svg>
+            <span class="map-label goal">goal / exit</span>
+            <span class="map-label ref">ref / original evidence</span>
+            <button class="node goal" type="button" data-map-node="goal"><span class="node-kind">GOAL</span><strong>守住主線</strong></button>
+            <button class="node finding" type="button" data-map-node="finding"><span class="node-kind">FINDING</span><strong>找到關鍵線索</strong></button>
+            <button class="node verify" type="button" data-map-node="verify"><span class="node-kind">VERIFY</span><strong>測試通過</strong></button>
+            <button class="node blocked" type="button" data-map-node="blocked"><span class="node-kind">BLOCKER</span><strong>這條路不通</strong></button>
+            <div class="map-status" id="mapStatus" aria-live="polite"><b>點一個節點：</b>地圖不是漂亮的圖，它是下一次回來時的路標。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-5" data-label="Baton Fanout">
+      <span class="slide-number">05</span>
+      <div class="slide-inner">
+        <div class="kicker">02 / Baton Fanout Skill</div>
+        <h2 class="section-title">主 agent 負責設計與監工，<br><span class="violet">不必親手砌每一塊磚。</span></h2>
+        <div class="baton-layout">
+          <div>
+            <p class="lede" style="margin-top:0;">蓋房子時，設計師要守住格局、品質與安全；真正砌牆、搬磚、鋪線，可以交給專門工班。Baton 的重點不是「多派幾個」，而是先踩煞車、再做值得的 fan-out。</p>
+            <div class="config-card">
+              <div class="config-label">SUGGESTED CODEX APP SETUP</div>
+              <div class="config-lines">
+                <div class="config-line"><code>GPT-5.6-terra / high</code><span>主 Codex agent<br>設計、監工、收斂</span></div>
+                <div class="config-line"><code>baton-fanout-skill</code><span>先判斷是否值得<br>再決定怎麼分工</span></div>
+                <div class="config-line"><code>gpt-5.6-luna / max</code><span>實際動手的 worker<br>在明確邊界內施工</span></div>
+              </div>
+            </div>
+            <div class="baton-checks" aria-label="Baton dispatch brake 五個問題">
+              <div class="baton-check"><b>01 / OUTCOME</b>要交付什麼？</div>
+              <div class="baton-check"><b>02 / DIRECT</b>主 agent 自己做更快嗎？</div>
+              <div class="baton-check"><b>03 / INDEPENDENCE</b>工作真的獨立嗎？</div>
+              <div class="baton-check"><b>04 / OWNERSHIP</b>誰擁有每個寫入？</div>
+              <div class="baton-check"><b>05 / CLOSURE</b>誰整合、驗收、報告？</div>
+            </div>
+          </div>
+          <div class="build-site" aria-label="Baton 工班平行施工示意">
+            <div class="foreman"><div class="foreman-avatar">⌘</div><div><strong>主 agent / Architect</strong><span>設計圖、邊界、最後判斷</span></div></div>
+            <div class="dispatch-line" aria-hidden="true"></div>
+            <div class="worker-row">
+              <div class="worker" style="--worker-color:var(--coral)"><div class="helmet">▦</div><strong>Worker A</strong><span>整理資料層<br>不碰 UI</span><div class="status">● READY</div></div>
+              <div class="worker" style="--worker-color:var(--violet)"><div class="helmet">⌘</div><strong>Worker B</strong><span>補一個 bounded patch<br>不碰 shared config</span><div class="status">● BUILDING</div></div>
+              <div class="worker" style="--worker-color:var(--mint)"><div class="helmet">✓</div><strong>Worker C</strong><span>跑獨立檢查<br>只回報證據</span><div class="status">● CHECKING</div></div>
+            </div>
+            <div class="site-footer"><span><b>並行 ≠ 亂派</b>：只把互不打架的工序拆開</span><span style="color:var(--violet);">ownership first</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-6" data-label="Luna Worker">
+      <span class="slide-number">06</span>
+      <div class="slide-inner">
+        <div class="kicker">03 / Codex CLI Luna Worker</div>
+        <h2 class="section-title">當介面沒有 Luna，<br><span class="mint">就把它接成一座安全的橋。</span></h2>
+        <div class="luna-layout">
+          <div class="bridge-board" aria-label="Codex CLI Luna Worker 邊界示意圖">
+            <div class="bridge-track">
+              <div class="bridge-box"><span class="tiny">MAIN AGENT</span><strong>已收斂的施工 brief</strong><span>目標、驗收條件、允許路徑與禁止寫入</span></div>
+              <div class="bridge-arrow">→</div>
+              <div class="bridge-box highlight"><span class="tiny">LUNA BRIDGE</span><strong>唯讀 worker</strong><span>用 Codex CLI / Luna 產生 apply_patch proposal</span></div>
+              <div class="bridge-arrow">→</div>
+              <div class="bridge-box"><span class="tiny">RETURN</span><strong>主 agent 驗收</strong><span>檢查 scope、套用 patch、跑 focused tests</span></div>
+            </div>
+            <div class="bridge-return"><b>Patch proposal 回來了</b><span>→ 還不是完成；完成要等主 agent 重新讀檔、驗證與收斂。</span></div>
+          </div>
+          <div>
+            <p class="lede" style="margin-top:0;">這個工具不是讓 Luna 越權，也不是把主 agent 的責任外包。它是 Baton 決定「值得派工」之後，提供一條可控的動手通道。</p>
+            <div class="luna-steps">
+              <div class="luna-step"><div class="num">1</div><div><strong>Read-only workspace</strong><span>worker 只能提出 patch，不直接改 shared workspace，不 commit、不 push。</span></div></div>
+              <div class="luna-step"><div class="num">2</div><div><strong>Bounded target paths</strong><span>brief 明確寫出可以碰哪些檔案；超出範圍就停下來回報。</span></div></div>
+              <div class="luna-step"><div class="num">3</div><div><strong>Main agent closes the loop</strong><span>主 agent 自己檢查 proposal、套用、跑測試，最後才對結果負責。</span></div></div>
+            </div>
+            <div class="safety-strip"><span>proposal only</span><span>scope checked</span><span>verify centrally</span><span>no blind retry</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" id="slide-7" data-label="合體示意">
+      <span class="slide-number">07</span>
+      <div class="slide-inner">
+        <div class="demo-head">
+          <div>
+            <div class="kicker">The three-tool loop</div>
+            <h2 class="section-title">三個工具合起來，<br><em>省的不是思考，是重複的來回。</em></h2>
+          </div>
+          <p class="fine-print">下面是概念示意，不是 benchmark。用來說明「工作形狀」怎麼改變。</p>
+        </div>
+        <div class="demo-shell" aria-label="三個工具合體的互動示意">
+          <div class="demo-toolbar">
+            <div class="demo-toggles" role="group" aria-label="選擇工作模式">
+              <button class="demo-toggle active" type="button" data-demo-mode="solo">一個人從頭做到尾</button>
+              <button class="demo-toggle" type="button" data-demo-mode="team">地圖 + 工班</button>
+            </div>
+            <button class="demo-play" id="demoPlay" type="button">▶ 播放一輪</button>
+          </div>
+          <div class="demo-body">
+            <div class="demo-steps" id="demoSteps">
+              <div class="demo-step active" data-step="0"><span class="num">01</span><strong>任務進場</strong><span>把目標講清楚</span></div>
+              <div class="demo-step" data-step="1"><span class="num">02</span><strong>留下路線</strong><span>知道已經走過什麼</span></div>
+              <div class="demo-step" data-step="2"><span class="num">03</span><strong>平行施工</strong><span>只拆真正獨立的工序</span></div>
+              <div class="demo-step" data-step="3"><span class="num">04</span><strong>驗收收斂</strong><span>主 agent 對結果負責</span></div>
+            </div>
+            <aside class="demo-message" id="demoMessage" aria-live="polite">
+              <div class="message-label">NARRATION / CURRENT STEP</div>
+              <h3 id="demoMessageTitle">一個人先把全部事情扛起來</h3>
+              <p id="demoMessageBody">任務、探索、實作、驗證都由同一個 agent 依序完成；每次切換脈絡，都可能再次付出找路成本。</p>
+              <div class="demo-stats">
+                <div class="demo-stat"><span>重複讀取</span><b id="demoReadStat">容易發生</b></div>
+                <div class="demo-stat"><span>並行工序</span><b id="demoParallelStat">1 條線</b></div>
+              </div>
+              <p class="demo-disclaimer">概念圖示：實際收益取決於任務大小、獨立性、工具輸出與驗證成本。</p>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide cta-slide" id="slide-8" data-label="開始安裝">
+      <span class="slide-number">08</span>
+      <div class="slide-inner cta-layout">
+        <div class="cta-copy">
+          <div class="kicker">Your next Codex task</div>
+          <h2 class="section-title">想開始？<br><span class="violet">把這句話貼給 Codex。</span></h2>
+          <p class="lede">先安裝三個工具，再回到你的下一個長任務：讓地圖守住脈絡，讓 Baton 決定分工，讓 Luna 在清楚邊界內動手。</p>
+          <div class="closing-lines">
+            <div class="closing-line"><i>01</i><b>Map first</b><span>先知道自己走到哪裡</span></div>
+            <div class="closing-line"><i>02</i><b>Fan out with brakes</b><span>只把值得平行的工序拆開</span></div>
+            <div class="closing-line"><i>03</i><b>Verify centrally</b><span>最後判斷永遠留在主 agent</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="prompt-card">
+            <div class="prompt-top"><span>INSTALL PROMPT / COPY THIS</span><button class="copy-button" id="copyPrompt" type="button">複製 prompt</button></div>
+            <pre class="prompt-text" id="installPrompt">我想要安裝 github repo <span class="prompt-url">https://github.com/phenomenoner/Chatgpt-Codex-App-Plus</span> 裡面的 1. context-canvas-codex 2. baton-fanout-skill 3. codex-cli-luna-worker 工具。</pre>
+          </div>
+          <div class="cta-links">
+            <a href="https://github.com/phenomenoner/Chatgpt-Codex-App-Plus" target="_blank" rel="noopener">ChatGPT Codex App Plus ↗</a>
+            <a href="https://github.com/phenomenoner/baton-fanout-skill" target="_blank" rel="noopener">Baton Fanout Skill ↗</a>
+            <a href="https://phenomenoner.github.io/hermes-agent-harness-plus/context-canvas-story.html" target="_blank" rel="noopener">Context Canvas origin story ↗</a>
+          </div>
+          <div class="tip-grid" aria-label="給 Codex App user 的兩個小 tips">
+            <article class="tip-card">
+              <div class="tip-label">TIP 01 / VISUAL</div>
+              <strong>Codex 也可以直接幫你生圖</strong>
+              <p>要做圖卡時，可以跟它說：「請製作一張 Infographic，並使用『圖文一體』生成，讓文字和畫面一起完成。」</p>
+            </article>
+            <article class="tip-card">
+              <div class="tip-label">TIP 02 / READABLE</div>
+              <strong>把任務結論整理成可打開的頁面</strong>
+              <p>請 agent 把重點結論、待確認事項與下一步整理成 HTML，直接用瀏覽器開，閱讀、展示和分享都更方便。</p>
+            </article>
+            <article class="tip-card">
+              <div class="tip-label">TIP 03 / REUSE</div>
+              <strong>把好用的流程整理成 skill</strong>
+              <p>如果某個流程以後還會用到，請 agent 整理成 skill，標註適用情況與範圍；確認適合長期共用後，再全域安裝，方便日後自動參考。</p>
+            </article>
+          </div>
+        </div>
+      </div>
+      <div class="footer-note"><span>Codex App Plus · seminar material</span><span>按 ← / → 切幕 · 按 P 隱藏控制列 · 按 F 全螢幕</span></div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const slides = [...document.querySelectorAll('.slide')];
+      const rail = document.getElementById('progressRail');
+      const current = document.getElementById('slideCurrent');
+      const total = document.getElementById('slideTotal');
+      const cleanMode = document.getElementById('cleanMode');
+      const fullscreen = document.getElementById('fullscreen');
+      const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      let activeIndex = 0;
+      let demoMode = 'solo';
+      let demoStep = 0;
+      let demoTimer = null;
+
+      total.textContent = String(slides.length).padStart(2, '0');
+      slides.forEach((slide, index) => {
+        const dot = document.createElement('button');
+        dot.className = 'nav-dot' + (index === 0 ? ' active' : '');
+        dot.type = 'button';
+        dot.setAttribute('aria-label', slide.dataset.label || `第 ${index + 1} 幕`);
+        dot.addEventListener('click', () => goTo(index));
+        rail.appendChild(dot);
+      });
+      const dots = [...rail.querySelectorAll('.nav-dot')];
+
+      function goTo(index) {
+        const next = Math.max(0, Math.min(slides.length - 1, index));
+        slides[next].scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+      }
+      function setActive(index) {
+        activeIndex = index;
+        slides.forEach((slide, i) => slide.classList.toggle('is-active', i === index));
+        dots.forEach((dot, i) => dot.classList.toggle('active', i === index));
+        current.textContent = String(index + 1).padStart(2, '0');
+      }
+      const observer = new IntersectionObserver((entries) => {
+        const visible = entries.filter(entry => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+        if (!visible) return;
+        const index = slides.indexOf(visible.target);
+        if (index >= 0) setActive(index);
+      }, { threshold: [0.45, 0.7] });
+      slides.forEach(slide => observer.observe(slide));
+      setActive(0);
+
+      document.addEventListener('keydown', (event) => {
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+        if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') {
+          event.preventDefault();
+          goTo(activeIndex + 1);
+        } else if (event.key === 'ArrowLeft' || event.key === 'PageUp') {
+          event.preventDefault();
+          goTo(activeIndex - 1);
+        } else if (event.key === 'Home') {
+          event.preventDefault();
+          goTo(0);
+        } else if (event.key === 'End') {
+          event.preventDefault();
+          goTo(slides.length - 1);
+        } else if (event.key.toLowerCase() === 'p') {
+          document.body.classList.toggle('presentation-clean');
+          cleanMode.textContent = document.body.classList.contains('presentation-clean') ? '顯示控制列' : '演講模式';
+        } else if (event.key.toLowerCase() === 'f') {
+          toggleFullscreen();
+        }
+      });
+
+      cleanMode.addEventListener('click', () => {
+        document.body.classList.toggle('presentation-clean');
+        cleanMode.textContent = document.body.classList.contains('presentation-clean') ? '顯示控制列' : '演講模式';
+      });
+      async function toggleFullscreen() {
+        try {
+          if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+          else await document.exitFullscreen();
+        } catch (_) {
+          fullscreen.textContent = '瀏覽器未允許';
+          setTimeout(() => fullscreen.textContent = '全螢幕', 1600);
+        }
+      }
+      fullscreen.addEventListener('click', toggleFullscreen);
+      document.addEventListener('fullscreenchange', () => {
+        fullscreen.textContent = document.fullscreenElement ? '退出全螢幕' : '全螢幕';
+      });
+
+      const mapCopy = {
+        goal: '<b>GOAL：</b>這一格提醒 agent：不要被枝節帶走，先守住真正要交付的結果。',
+        finding: '<b>FINDING：</b>線索只留短摘要，具體內容仍可沿著 ref 回到原始證據。',
+        verify: '<b>VERIFY：</b>完成不是「我覺得可以」，而是有一個可回看的驗證節點。',
+        blocked: '<b>BLOCKER：</b>走不通的路也要標出來，下一次才不會重新撞同一面牆。'
+      };
+      document.querySelectorAll('[data-map-node]').forEach(node => {
+        node.addEventListener('click', () => {
+          document.querySelectorAll('[data-map-node]').forEach(item => item.classList.remove('active'));
+          node.classList.add('active');
+          document.getElementById('mapStatus').innerHTML = mapCopy[node.dataset.mapNode];
+        });
+      });
+
+      const demoContent = {
+        solo: [
+          ['一個人先把全部事情扛起來', '任務、探索、實作、驗證都由同一個 agent 依序完成；每次切換脈絡，都可能再次付出找路成本。', '容易發生', '1 條線'],
+          ['又回頭找一次證據', '沒有任務地圖時，resume 後常要重新翻過去的輸出，確認決策、限制與已排除的路。', '高', '1 條線'],
+          ['明明能平行，卻只能排隊', '沒有 dispatch brake，也不容易判斷哪些工作互不依賴；結果是同一個 agent 等待自己完成前一站。', '中～高', '1 條線'],
+          ['完成，但收尾也由自己扛', '所有 patch、測試與矛盾都回到同一個 context；工作沒有分流，合併成本也沒有消失。', '可能重複', '1 條線']
+        ],
+        team: [
+          ['先把任務形狀畫出來', 'Context Canvas 留下目標、依賴、blocker 與驗證節點；下一次回來，先看到路線再看細節。', '較少', '先畫地圖'],
+          ['Baton 先踩煞車', '先問是否值得派工、工序是否獨立、每個檔案誰負責，避免「多派幾個」反而增加協調成本。', '較少', '分工前判斷'],
+          ['Luna workers 平行施工', '需要時讓 bounded worker 讀取 brief、提出 patch proposal；實作回合可以平行，但寫入所有權保持清楚。', '較少', '多條線'],
+          ['主 agent 收斂與驗收', 'proposal 回來後，主 agent 重新讀檔、檢查範圍、套用 patch、跑測試，最後才做完成判斷。', '可回看', '多線 → 1 個結果']
+        ]
+      };
+      const demoSteps = [...document.querySelectorAll('.demo-step')];
+      const demoTitle = document.getElementById('demoMessageTitle');
+      const demoBody = document.getElementById('demoMessageBody');
+      const demoRead = document.getElementById('demoReadStat');
+      const demoParallel = document.getElementById('demoParallelStat');
+      function renderDemo() {
+        const [title, body, read, parallel] = demoContent[demoMode][demoStep];
+        demoSteps.forEach((step, index) => {
+          step.classList.toggle('active', index === demoStep);
+          step.classList.toggle('done', index < demoStep);
+        });
+        demoTitle.textContent = title;
+        demoBody.textContent = body;
+        demoRead.textContent = read;
+        demoParallel.textContent = parallel;
+      }
+      document.querySelectorAll('[data-demo-mode]').forEach(button => {
+        button.addEventListener('click', () => {
+          demoMode = button.dataset.demoMode;
+          demoStep = 0;
+          document.querySelectorAll('[data-demo-mode]').forEach(item => item.classList.toggle('active', item === button));
+          renderDemo();
+        });
+      });
+      demoSteps.forEach((step, index) => step.addEventListener('click', () => { demoStep = index; renderDemo(); }));
+      document.getElementById('demoPlay').addEventListener('click', () => {
+        if (demoTimer) {
+          clearInterval(demoTimer);
+          demoTimer = null;
+          document.getElementById('demoPlay').textContent = '▶ 播放一輪';
+          return;
+        }
+        demoStep = 0;
+        renderDemo();
+        document.getElementById('demoPlay').textContent = '■ 停止播放';
+        demoTimer = setInterval(() => {
+          if (demoStep >= demoContent[demoMode].length - 1) {
+            clearInterval(demoTimer);
+            demoTimer = null;
+            document.getElementById('demoPlay').textContent = '▶ 再播一輪';
+            return;
+          }
+          demoStep += 1;
+          renderDemo();
+        }, reduceMotion ? 1100 : 1700);
+      });
+
+      const promptText = '我想要安裝 github repo https://github.com/phenomenoner/Chatgpt-Codex-App-Plus 裡面的 1. context-canvas-codex 2. baton-fanout-skill 3. codex-cli-luna-worker 工具。';
+      const copyButton = document.getElementById('copyPrompt');
+      copyButton.addEventListener('click', async () => {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(promptText);
+          copied = true;
+        } catch (_) {
+          const helper = document.createElement('textarea');
+          helper.value = promptText;
+          helper.setAttribute('readonly', '');
+          helper.style.position = 'fixed';
+          helper.style.opacity = '0';
+          document.body.appendChild(helper);
+          helper.select();
+          try { copied = document.execCommand('copy'); } catch (_) { copied = false; }
+          helper.remove();
+        }
+        copyButton.textContent = copied ? '已複製 ✓' : '請手動選取';
+        setTimeout(() => copyButton.textContent = '複製 prompt', 1800);
+      });
+    })();
+  </script>
+</body>
+</html>
