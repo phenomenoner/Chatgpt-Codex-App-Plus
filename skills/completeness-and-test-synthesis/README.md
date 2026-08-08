@@ -1,98 +1,59 @@
 # completeness-and-test-synthesis
 
-A portable Claude skill that turns "is this actually done, and is it tested at the
-right altitude?" into two hard gates instead of a vibe.
+A portable skill for answering a concrete question: does the available evidence
+support the exact readiness claim, and what is the smallest missing test?
 
-## What problem it solves
+It is intentionally not a mandatory end-of-task gate. Ordinary local changes
+should use ordinary local checks.
 
-Two failure modes dominate mature, "well-tested" codebases:
+## Core model
 
-1. **Fix A breaks B** — a local fix silently violates a cross-cutting contract.
-2. **Ship, then immediately discover the bug** — a new version reveals a new (or
-   un-resolved old) problem the first time it is actually used.
+Choose the lowest altitude where the relevant defect would actually fail:
 
-Both happen *while the test suite is green*. The root cause is **verification
-altitude**: the tests sit at the isolated-function layer, but the bugs live in
-cross-module, stateful, concurrent, multi-actor **integrated paths**. Green units
-prove the parts, not the assembled feature. A compounding cause: teams record
-rich evidence (logs, telemetry, receipts, traces) but encode the regressions they
-should catch as *prose* (a "known gaps" doc, a checklist string) rather than an
-*executable test* — and prose cannot fail a build.
+- **T0:** static shape, compile, formatting, schema, or generated consistency.
+- **T1:** local behavior of one unit.
+- **T2:** a touched real component or contract seam.
+- **T3:** a lifecycle, multi-component, recovery, or user scenario that lower
+  tiers cannot faithfully represent.
+- **T4:** an authorized live or externally visible claim.
 
-This skill is the discipline that closes both gaps.
+A write or state transition does not automatically require T3. A higher tier is
+useful only when it exposes a credible failure that a cheaper check cannot.
 
-## What it does
+For a safe, reproducible existing bug, prefer a regression that fails for the
+old defect and passes after the repair. Fail-first is not mandatory for net-new
+behavior, documentation or mechanical changes, an already-failing test, or an
+unsafe or unavailable pre-change state. In those cases, use a current-state
+check that would still fail if the behavior were removed or the defect returned.
 
-It applies two **gates** (pass/fail conditions, not advice):
+## When to use it
 
-- **Gate A — Completeness check.** Classify a change's blast radius, assign the
-  test tier it requires (T0–T4), run a hard checklist where each item needs
-  *evidence* (a passing/failing test or a captured artifact), and emit a verdict
-  table where `reached < required` is a stated blocker.
-- **Gate B — Test synthesis.** Manufacture the missing higher-altitude tests —
-  regression-first from a live incident, from a known-gaps list, or from the
-  boundary matrix — with a focus on **replaying recorded data** (logs / receipts
-  / traces) into deterministic regression tests.
+Use the skill for:
 
-Four non-negotiable rules run through both: **anti-self-attestation** (a checklist
-string is never the evidence), **fail-first** (a test must fail on the pre-change
-code), **regression-first** (reproduce before you repair), and **honest tiering**
-(never relabel a fallback/partial as "done"/"full parity").
+- an explicit `done`, readiness, merge, release, or cutover judgment;
+- recurring regressions or green tests followed by broken real use;
+- cross-component or lifecycle behavior whose evidence altitude is unclear;
+- converting sanitized logs, traces, or receipts into replay tests.
 
-## How it is structured (general engine + project adapter)
+Do not invoke it merely because implementation work ended. It does not require
+a project adapter, verdict table, plan, WAL, handoff, full suite, or independent
+review when those artifacts do not improve the claim.
 
-The skill body is project-agnostic. A **Project Adapter** section (run once per
-repo) binds the gates to that project's real contracts, cross-cutting boundaries,
-recorded-data sources, and test runner. So the same skill works across repos; each
-repo gets a concrete instance.
+## Structure
 
-```
+```text
 completeness-and-test-synthesis/
-├── README.md                       (this file)
-├── SKILL.md                        (the skill: frontmatter + the two gates)
+├── README.md
+├── SKILL.md
 └── references/
-    └── receipt-to-replay.md        (the 6-step recipe for replay tests from records)
+    └── receipt-to-replay.md
 ```
 
-`references/receipt-to-replay.md` is loaded on demand — only when actually building
-a replay test — to keep the main skill lean (progressive disclosure).
+The replay reference is loaded only when recorded evidence must become a
+deterministic fixture.
 
-## Install
+## Installation
 
-Copy the skill folder into your user-level skills directory:
-
-- macOS / Linux: `~/.claude/skills/completeness-and-test-synthesis/`
-- Windows: `C:\Users\<you>\.claude\skills\completeness-and-test-synthesis\`
-
-The loader reads `SKILL.md` (and `references/` on demand). `README.md` is
-documentation only and is ignored by the loader, so it is safe to leave in place.
-
-## When it triggers
-
-Designed to fire whenever you (or a teammate) are about to call a change "done",
-"finished", "ready to merge/ship/cut over", or when asking "is this ready?",
-"did we actually finish this?", "why does it keep breaking right after release?",
-or "is our test coverage at the right level?". See the `description` field in
-`SKILL.md` for the full trigger surface.
-
-## Positioning vs adjacent skills
-
-- A manual "run the app and watch it" verify flow checks one change by hand; this
-  skill decides *whether the change is verified at all*, at the right altitude.
-- A diff code-review finds bugs in the patch; this skill asks whether the patch is
-  *complete and adequately tested*, and how to synthesize the missing tests.
-- A general dev-workflow skill covers planning→implementation→completion; this is
-  the specialized engine that sharpens the "completion / is-it-done" check.
-
-## Origin
-
-Distilled from a 2026-06-28 second-opinion analysis of a long-lived Rust agent
-harness that kept shipping versions that broke on first use despite rigorous unit
-testing. The repo-specific instantiation of this skill (its first Project Adapter)
-lives with that project as a local SOP; this folder is the portable, de-anchored
-engine extracted from it.
-
-## Status
-
-`version 0.1.0`. Authored and registered; the optional eval/benchmark iteration
-and description-triggering optimization passes have not yet been run.
+Use this repository's installer, or copy the folder into a compatible
+user-level skills directory. The loader reads `SKILL.md`; this README is public
+documentation and does not control runtime triggering.

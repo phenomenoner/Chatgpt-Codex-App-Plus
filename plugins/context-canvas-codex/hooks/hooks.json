@@ -16,6 +16,19 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -I \"${PLUGIN_ROOT}/scripts/context_canvas.py\" hook-user-prompt-submit",
+            "commandWindows": "python -I \"$env:PLUGIN_ROOT\\scripts\\context_canvas.py\" hook-user-prompt-submit",
+            "timeout": 10,
+            "additionalContextLimit": 1000
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": ".*",

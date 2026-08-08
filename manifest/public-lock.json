@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 1497,
+      "bytes": 1623,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/.codex-plugin/plugin.json",
-      "sha256": "30cb4391e3e746a941b7f50db1d47d71887a323943605dd0f01920bcc71caffc"
+      "sha256": "8e783677e34aeb06f612682fe03bf0a3390f058eadbada495ea0c42d6eb22f33"
     },
     {
       "bytes": 226,
@@ -25,28 +25,28 @@
       "sha256": "14fc5530a71e04722a9e72a9177723fe0443eb3f639f60d36d87cd4a2d4e8ab3"
     },
     {
-      "bytes": 11065,
+      "bytes": 12922,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/README.md",
-      "sha256": "8356ced7b0558a211eb11d79f7a921720aed52db618118a265026f9515b068c6"
+      "sha256": "b88be6bb61e4864793e7fdf4a146d0161780ee1e971b4f5b0c8064ffaa3391c2"
     },
     {
-      "bytes": 8101,
+      "bytes": 9052,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/SECURITY.md",
-      "sha256": "a9a42b6c11d1b177bf289395f086dc089fbd67666abc84d6e5f9f3bf480c8dff"
+      "sha256": "26e3f989649db5ef9d404e4aa66561b8a8b7476108ad4e639a0fb21db1a5c1dd"
     },
     {
-      "bytes": 10190,
+      "bytes": 10289,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/docs/SNAPSHOT_STORE_DESIGN.md",
-      "sha256": "1730044a9489ffa0b8d5fea708940f7518f202b137af80caeace9fed736e3ab9"
+      "sha256": "ae8617aab8e33101b16bbac5df5054393c7d3d351c1b991b32290a495775c200"
     },
     {
-      "bytes": 1106,
+      "bytes": 1531,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/hooks/hooks.json",
-      "sha256": "2fbf237221d610828125953d93557bd89c4dffe4948a55a44681361abfe2c01a"
+      "sha256": "e0a03e52b8e515cc1e48fcd8b59d5b7019860e96ff148db5f05f0ab039f3ab22"
     },
     {
       "bytes": 10824,
@@ -55,34 +55,34 @@
       "sha256": "65b3f1ab6b1d8fb69522fbd46d91d47b524fed294e5f21c9a5e36767c99ec3b6"
     },
     {
-      "bytes": 148110,
+      "bytes": 171341,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas.py",
-      "sha256": "38ff97be4bc70d198465886aa7e887fd80e2da08452081d66fb232a8474a99a7"
+      "sha256": "272e9d399419037bc48381e8075fb876dbbfcab83997f0031dd29dd8c24e570a"
     },
     {
-      "bytes": 17524,
+      "bytes": 20592,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas_mcp.py",
-      "sha256": "dd87451a90baa0c8a7b6111516261fb47318d8f924478fc0fd0dc2badb1ddca6"
+      "sha256": "d476401849c5acc466d56390c4b1149464954dc88cd2ea6dcd58ef984dea712b"
     },
     {
-      "bytes": 20057,
+      "bytes": 20960,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/install_context_canvas_hook.py",
-      "sha256": "c5e012c36e7c3a6431d62f6e15b4fa3280edca852dd4e4c11f17597d8025ab2f"
+      "sha256": "9722df9461da087807f3ca0b81ec7b206096009330cec8b5c1733273cd4e549b"
     },
     {
-      "bytes": 103851,
+      "bytes": 114295,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/test_context_canvas.py",
-      "sha256": "e1c7a2d5c678576fd5ba2f5fcd101c2e8f726cffcdfeae970c795891d543dff3"
+      "sha256": "fb2495a05875dbca319a1717d1b4c6875e0051a1eb7abf7c6e0334509ca7893f"
     },
     {
-      "bytes": 6932,
+      "bytes": 8618,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/SKILL.md",
-      "sha256": "cb338e61972ab84aabac7dcce2cd89b5398e2f56a40510d21c3fc6484191cca6"
+      "sha256": "3d738041c0fb4e877a5891edb48e7f9f99fb01a030b430867c6a3066c543f09d"
     },
     {
       "bytes": 222,
@@ -91,16 +91,16 @@
       "sha256": "cc690e774e5fba0f2947d6279342143116bfac5cd7f6b1927c206fc1ee7d4926"
     },
     {
-      "bytes": 11779,
+      "bytes": 14526,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/SKILL.md",
-      "sha256": "9bc5a2593aafc74dee19d2371170927606ea717f47c03232f516a071c8c4fe13"
+      "sha256": "83c4cae4b2708f2880c18ca1df4202c7d28164e87c92d7b9b88dbedd98ea95cc"
     },
     {
-      "bytes": 299,
+      "bytes": 338,
       "componentId": "batch-complete-independent-review",
       "path": "skills/batch-complete-independent-review/agents/openai.yaml",
-      "sha256": "765d6c0f8355af6323e363d670ba14b6098815fc16d5b9883560449bc5b8aac2"
+      "sha256": "d12533dfe39c4b16e8af451138e22ede5dc05925ade668e91736e056c322aad4"
     },
     {
       "bytes": 1139,
@@ -187,16 +187,16 @@
       "sha256": "ba975787db36f194f5dd3212112b8f86dac8f11bc8427bd6edd973043541d295"
     },
     {
-      "bytes": 4647,
+      "bytes": 2299,
       "componentId": "completeness-and-test-synthesis",
       "path": "skills/completeness-and-test-synthesis/README.md",
-      "sha256": "8b8c36cf79dbca0215ce2d49a69f759232f7c2b7041f2222e71f68b3e4f2149e"
+      "sha256": "6c4b41d1cd7fb6939d2207de8f74af800f1215feab0636d3668b044a273e4a36"
     },
     {
-      "bytes": 13502,
+      "bytes": 7067,
       "componentId": "completeness-and-test-synthesis",
       "path": "skills/completeness-and-test-synthesis/SKILL.md",
-      "sha256": "bee5a9dd3de1021ab2fe051c6d6c8d206dcdb7c96104ba67a4b7e9e3ba764838"
+      "sha256": "e7149166dc4944bfb0c1076aa92d7af1df126e902d453087a30007261ec18641"
     },
     {
       "bytes": 4242,

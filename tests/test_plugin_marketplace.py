@@ -27,8 +27,9 @@ class PluginMarketplaceContractTests(unittest.TestCase):
             (plugin_root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(manifest["name"], "context-canvas-codex")
-        self.assertEqual(manifest["version"], "0.3.0")
+        self.assertEqual(manifest["version"], "0.4.0")
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
+        self.assertLessEqual(len(manifest["interface"]["defaultPrompt"]), 3)
 
     def test_context_canvas_mcp_and_hook_commands_stay_inside_plugin(self):
         plugin_root = ROOT / "plugins" / "context-canvas-codex"
@@ -39,12 +40,21 @@ class PluginMarketplaceContractTests(unittest.TestCase):
         self.assertEqual(server["cwd"], ".")
 
         hooks = json.loads((plugin_root / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(hooks["hooks"]), {"SessionStart", "PostToolUse"})
+        self.assertEqual(
+            set(hooks["hooks"]),
+            {"SessionStart", "UserPromptSubmit", "PostToolUse"},
+        )
         groups = hooks["hooks"]["SessionStart"]
         self.assertEqual(len(groups), 1)
         self.assertEqual(groups[0]["matcher"], "^(startup|resume|clear|compact)$")
         command = groups[0]["hooks"][0]["command"]
         self.assertIn("${PLUGIN_ROOT}/scripts/context_canvas.py", command)
+
+        prompt_groups = hooks["hooks"]["UserPromptSubmit"]
+        self.assertEqual(len(prompt_groups), 1)
+        self.assertNotIn("matcher", prompt_groups[0])
+        prompt_command = prompt_groups[0]["hooks"][0]["command"]
+        self.assertTrue(prompt_command.endswith("hook-user-prompt-submit"))
 
         post_tool_groups = hooks["hooks"]["PostToolUse"]
         self.assertEqual(len(post_tool_groups), 1)

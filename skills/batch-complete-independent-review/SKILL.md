@@ -1,13 +1,37 @@
 ---
 name: batch-complete-independent-review
-description: Provider-neutral, batch-complete code and engineering review gate. Use whenever Codex is asked to review code, a diff, pull request, patch, migration, frozen candidate, release, or pre-cutover change; when a project requires an independent hash-bound review; when judging whether reviewed code is ready; or when serial reviews keep discovering sibling blockers one round at a time. Default to one counterfactual fixed-point reviewer, distinguish actual PASS from PASS_UNDER_ASSUMPTIONS, and escalate through Baton only when risk, disagreement, or coverage gaps justify another reviewer. Do not trigger merely because ordinary implementation work occurred without a review request or project review gate.
+description: Review code and engineering changes without stopping at the first blocker. Use lightweight finding-oriented mode for an ordinary code, diff, patch, or pull-request review. Use the formal hash-bound fixed-point gate only for an explicitly independent, final, release, migration, or pre-cutover review, a project-mandated gate, or recurring reviews that keep discovering sibling blockers one round at a time. Do not trigger merely because implementation work occurred.
 ---
 
-# Batch-Complete Independent Review
+# Batch-Complete Review
 
 Find the complete actionable blocker batch before repair instead of stopping at
-the first issue. Keep actual-candidate truth separate from counterfactual
-closure.
+the first issue. Scale the review machinery to the decision being made.
+
+## Select the mode first
+
+### Ordinary finding review
+
+For a normal code, diff, patch, or pull-request review:
+
+- inspect the current changed bytes, intended behavior, callers, relevant tests,
+  and sibling failure paths;
+- continue after the first finding so the user gets one coherent actionable
+  batch;
+- report findings by severity with file/line evidence, then state residual
+  testing or scope gaps;
+- do not require a frozen manifest, coverage matrix, external reviewer, formal
+  verdict schema, or counterfactual assumption ledger.
+
+The reviewer may conclude that there are no findings, but that is not a formal
+release or cutover authorization.
+
+### Formal independent gate
+
+Use the remaining hash-bound protocol only when the request or project contract
+needs an independent/final/release/migration/pre-cutover decision, or when a
+recurring sibling-blocker pattern makes fixed-point coverage materially useful.
+Do not use formal artifacts merely to make an ordinary review look rigorous.
 
 ## Preserve the surrounding rules
 
@@ -15,19 +39,20 @@ closure.
   reviewer loop for every code change.
 - Invoke `baton-fanout-skill` before dispatching any subagent. Let Baton own
   worker count, model/effort routing, context minimization, and write ownership.
-- Apply `completeness-and-test-synthesis` for blast-radius and required T0-T4
-  evidence. Do not duplicate or weaken its test gate.
+- Apply `completeness-and-test-synthesis` when its narrower readiness,
+  recurring-regression, lifecycle, or evidence-gap triggers apply. Do not load
+  it solely because an ordinary review is underway.
 - Use `claude-independent-review` only when the user explicitly authorizes
   Claude. Treat Claude, Codex subagents, and local CLIs as execution adapters,
   not as this protocol's authority.
 - Obey stricter project privacy, freeze, release, live-operation, and cutover
   rules. Review authority never authorizes implementation or live mutation.
 
-## Choose the review shape
+## Choose the formal review shape
 
 Start with one primary reviewer using the counterfactual fixed-point pass.
 
-- **L1 local:** one batch-complete reviewer; no automatic auditor.
+- **L1 independent:** one batch-complete reviewer; no automatic auditor.
 - **L2 cross-cutting:** one primary reviewer. Add one narrow coverage auditor
   when authority, identity, shared mutation, recovery, concurrency, or multiple
   lifecycle phases are involved.
@@ -45,15 +70,27 @@ well-supported blocker blocks; do not use majority vote.
 Read [references/protocol.md](references/protocol.md) for risk classification,
 the fixed-point algorithm, matrix construction, escalation, and invalidation.
 
-## Build deterministic intake
+## Build deterministic formal intake
 
-Before semantic review, create or identify:
+Skip this section in ordinary finding review. For a formal gate, create or
+identify:
 
 1. An immutable candidate manifest, including intended untracked files.
-2. A verification-evidence index with executable and receipt hashes.
+2. A verification-evidence index with executable and receipt hashes. Label each
+   build record as source/input, immutable executed instance, immutable
+   deployment instance, or derived mutable path, and state whether the review
+   claims instance identity, recipe identity, reproducibility, or semantic
+   equivalence. Never encode current liveness of a mutable Cargo/build output as
+   continuity of an earlier execution.
 3. A neutral review plan with contracts, authority boundaries, and budgets.
 4. A required coverage matrix spanning entrypoints, lifecycle phases,
    mutations, recovery/cleanup paths, adversarial variants, and evidence tiers.
+
+Make every required matrix row atomic: one contract, entrypoint, operation,
+lifecycle phase, adversarial variant, expected behavior, and required evidence
+tier. Do not use composite rows such as "all recovery phases" or let reviewers
+silently invent required subcells. A newly discovered required subcell is a
+matrix gap: rebind the review wave and keep the active finding set incomplete.
 
 Use `scripts/review_gate.py bind` to hash these four artifacts into one review
 wave. Hashing and schema checks are tooling work, not frontier-model work.
@@ -115,8 +152,11 @@ Require this loop:
    reopen obligations are closed.
 
 Finding a blocker changes the actual verdict to `BLOCKED`; it never ends the
-review. If budget, access, hash drift, scope, or an unvisited required cell
-prevents convergence, return `INCOMPLETE`.
+review. If hash, access, or scope failure prevents a trustworthy candidate
+judgment, return actual `INCOMPLETE`. If a blocker is already supported but
+required evidence, safe-sibling closure, or reopen obligations remain open,
+preserve actual `BLOCKED`, set `findingSetStatus` to
+`EVIDENCE_CLOSURE_INCOMPLETE`, and keep the counterfactual verdict unresolved.
 
 ## Keep verdicts non-substitutable
 
@@ -131,9 +171,23 @@ Use all three fields:
 ship, release, migrate, preflight, or cut over. Any blocker means the actual
 candidate remains `BLOCKED`.
 
+`EVIDENCE_CLOSURE_INCOMPLETE` is also non-authorizing. It means the candidate
+is already known to be blocked while the complete blocker batch or required
+evidence closure remains unfinished. It can never substitute for
+`BATCH_COMPLETE` in a lane or `AUDITED_BATCH_COMPLETE` in synthesis.
+
 After implementation changes, freeze the actual new bytes, reacquire the
 mapped evidence, and obtain the project-required fresh review. Historical
 findings remain useful; their verdict never transfers to new bytes.
+
+Treat frozen evidence tooling as append-only. If a validator confuses an
+immutable executed artifact with a mutable build path, do not edit a self-bound
+validator in place. Preserve the frozen bytes; add a hash-bound superseding
+validator and every path-coupled consumer; retain all unaffected checks; record
+the narrowed claim and missing evidence explicitly; and independently review
+the complete superseding set. A later non-reproducible rebuild does not by
+itself invalidate preserved source, test, or deployment-instance evidence, but
+drift of an input or the selected deployment instance does.
 
 ## Audit coverage without repeating the full review
 

@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA = "context-canvas-codex-hook-install.v2"
+SCHEMA = "context-canvas-codex-hook-install.v3"
+PREVIOUS_SCHEMA = "context-canvas-codex-hook-install.v2"
 LEGACY_SCHEMA = "context-canvas-codex-hook-install.v1"
 SOURCE_SCRIPT = Path(__file__).with_name("context_canvas.py")
 INSTALL_DIR_NAME = "context-canvas-codex"
@@ -28,9 +29,16 @@ INSTALLED_SCRIPT_NAME = "context_canvas.py"
 INSTALL_MANIFEST_NAME = "hook-install.json"
 HOOKS_FILE_NAME = "hooks.json"
 SESSION_STATUS_MESSAGE = "Restoring Context Canvas [context-canvas-codex user hook]"
+TURN_STATUS_MESSAGE = "Refreshing Context Canvas identity [context-canvas-codex user hook]"
 SNAPSHOT_STATUS_MESSAGE = "Archiving tool snapshot [context-canvas-codex user hook]"
 SESSION_MATCHER = "^(startup|resume|clear|compact)$"
 POST_TOOL_MATCHER = ".*"
+MANAGED_EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse")
+MANAGED_MARKERS = {
+    "SessionStart": SESSION_STATUS_MESSAGE,
+    "UserPromptSubmit": TURN_STATUS_MESSAGE,
+    "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
+}
 MAX_JSON_BYTES = 1024 * 1024
 
 
@@ -159,6 +167,24 @@ def _expected_groups(installed_script: Path) -> dict[str, dict[str, Any]]:
                 }
             ],
         },
+        "UserPromptSubmit": {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": (
+                        f"python3 -I {shlex.quote(installed_script.as_posix())} "
+                        "hook-user-prompt-submit"
+                    ),
+                    "commandWindows": (
+                        f"python -I {_powershell_quote(installed_script)} "
+                        "hook-user-prompt-submit"
+                    ),
+                    "timeout": 10,
+                    "statusMessage": TURN_STATUS_MESSAGE,
+                    "additionalContextLimit": 1000,
+                }
+            ],
+        },
         "PostToolUse": {
             "matcher": POST_TOOL_MATCHER,
             "hooks": [
@@ -192,7 +218,7 @@ def _hooks_document(path: Path) -> dict[str, Any]:
         payload["hooks"] = {}
     elif not isinstance(hooks, dict):
         raise InstallerError("Codex hooks.json field hooks must contain an object")
-    for event_name in ("SessionStart", "PostToolUse"):
+    for event_name in MANAGED_EVENTS:
         groups = payload["hooks"].get(event_name)
         if groups is None:
             payload["hooks"][event_name] = []
@@ -246,7 +272,11 @@ def _load_owned_manifest(path: Path) -> dict[str, Any] | None:
     payload = _load_json(path, "Context Canvas hook install manifest", missing=None)
     if payload is None:
         return None
-    if not isinstance(payload, dict) or payload.get("schema") not in {SCHEMA, LEGACY_SCHEMA}:
+    if not isinstance(payload, dict) or payload.get("schema") not in {
+        SCHEMA,
+        PREVIOUS_SCHEMA,
+        LEGACY_SCHEMA,
+    }:
         raise InstallerError("Context Canvas hook install manifest is foreign or invalid")
     if payload.get("installed_script") != f"{INSTALL_DIR_NAME}/{INSTALLED_SCRIPT_NAME}":
         raise InstallerError("Context Canvas hook install manifest target is invalid")
@@ -260,9 +290,14 @@ def _load_owned_manifest(path: Path) -> dict[str, Any] | None:
             raise InstallerError("legacy Context Canvas handler digest is invalid")
     else:
         handler_hashes = payload.get("handlers_sha256")
+        expected_events = (
+            set(MANAGED_EVENTS)
+            if payload.get("schema") == SCHEMA
+            else {"SessionStart", "PostToolUse"}
+        )
         if (
             not isinstance(handler_hashes, dict)
-            or set(handler_hashes) != {"SessionStart", "PostToolUse"}
+            or set(handler_hashes) != expected_events
             or any(not isinstance(value, str) or len(value) != 64 for value in handler_hashes.values())
         ):
             raise InstallerError("Context Canvas handler digests are invalid")
@@ -319,14 +354,10 @@ def check(codex_home: Path) -> dict[str, Any]:
         if _sha256_bytes(installed) != state["source_hash"]:
             errors.append("installed hook script drifted from the current source")
         hooks = _hooks_document(state["hooks_path"])
-        markers = {
-            "SessionStart": SESSION_STATUS_MESSAGE,
-            "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
-        }
         for event_name, expected_group in state["expected"].items():
             groups = hooks["hooks"][event_name]
             if _managed_group_index(
-                groups, expected_group, marker=markers[event_name]
+                groups, expected_group, marker=MANAGED_MARKERS[event_name]
             ) is None:
                 errors.append(f"Context Canvas {event_name} user-hook handler is missing")
         if manifest is not None and manifest != _manifest_payload(
@@ -359,15 +390,11 @@ def install(codex_home: Path) -> dict[str, Any]:
         if interrupted_hash != state["source_hash"]:
             raise InstallerError("refusing to overwrite a foreign Context Canvas hook script")
 
-    markers = {
-        "SessionStart": SESSION_STATUS_MESSAGE,
-        "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
-    }
     group_indexes = {
         event_name: _managed_group_index(
             hooks["hooks"][event_name],
             expected_group,
-            marker=markers[event_name],
+            marker=MANAGED_MARKERS[event_name],
         )
         for event_name, expected_group in state["expected"].items()
     }
@@ -437,15 +464,11 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     manifest = _load_owned_manifest(state["manifest_path"])
     hooks = _hooks_document(state["hooks_path"])
-    markers = {
-        "SessionStart": SESSION_STATUS_MESSAGE,
-        "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
-    }
     group_indexes = {
         event_name: _managed_group_index(
             hooks["hooks"][event_name],
             expected_group,
-            marker=markers[event_name],
+            marker=MANAGED_MARKERS[event_name],
         )
         for event_name, expected_group in state["expected"].items()
     }
@@ -490,7 +513,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Install, check, or retire the Context Canvas user-level "
-            "SessionStart and PostToolUse hooks"
+            "SessionStart, UserPromptSubmit, and PostToolUse hooks"
         )
     )
     parser.add_argument("action", choices=("install", "check", "uninstall"))

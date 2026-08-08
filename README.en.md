@@ -14,7 +14,7 @@
 
 The best Codex workflows rarely live in one file. They emerge across durable instructions, focused skills, PowerShell helpers, and safety contracts. Codex App Plus packages the reusable parts into one curated outer layer:
 
-- Review to closure: do not stop at the first blocker; keep going until required coverage reaches a fixed point.
+- Review proportionally: ordinary reviews return a complete finding batch; explicit independent or release gates can add fixed-point, hash-bound closure.
 - Preserve long-task shape and evidence: keep a semantic task map separate from historical tool snapshots governed by an explicit sanitization policy across resume, compaction, and later investigation.
 - Supervise long runs cheaply: move heartbeat, stall detection, and terminal wakeups outside expensive reasoning turns.
 - Delegate with brakes: require a real independence and ownership case before spawning workers.
@@ -23,7 +23,7 @@ The best Codex workflows rarely live in one file. They emerge across durable ins
 
 ## Included components
 
-The bundle includes the `context-canvas-codex` plugin plus seven original skills and tools. Context Canvas provides a local semantic task map plus content-addressed, deduplicated, TTL/pin-managed historical tool snapshots captured after sanitization. It also provides resume/compact recovery, dependency-aware nodes, bounded search and closeout, and a persistent stdio MCP surface shared by Codex App and CLI. The other components cover batch-complete review, long-run supervision, a bounded Luna CLI worker, completeness synthesis, incident-to-regression packaging, an explicit Claude review adapter, and A2A Superhub operation.
+The bundle includes the `context-canvas-codex` plugin plus seven original skills and tools. Context Canvas keeps hook-derived session identity separate from a continuable semantic task lineage, while content-addressed, deduplicated, TTL/pin-managed historical tool snapshots remain separately searchable after sanitization. It provides per-prompt identity recovery, explicit lineage, dependency-aware nodes, bounded search and closeout, and a persistent stdio MCP surface shared by Codex App and CLI. The other components cover proportional batch-complete review, long-run supervision, a bounded Luna CLI worker, evidence-driven completeness synthesis, incident-to-regression packaging, an explicit Claude review adapter, and A2A Superhub operation.
 
 Components that already have a canonical public home stay as versioned pointers instead of copied forks. Codex users are pointed directly to the [Codex-specialized Baton branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing), while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
 
@@ -46,9 +46,9 @@ codex plugin add context-canvas-codex@codex-app-plus
 codex plugin list
 ```
 
-First open a new task and confirm that the model actually received that task's
-opaque Context Canvas ID. If the plugin, skill, and MCP server appear but the
-new ID does not, install the same `SessionStart` plus `PostToolUse` hook pair through Codex's user
+If the plugin, skill, and MCP server appear but the current prompt receives no
+opaque Context Canvas ID, install the same `SessionStart`,
+`UserPromptSubmit`, and `PostToolUse` hooks through Codex's user
 configuration layer from the repository root:
 
 ```powershell
@@ -56,7 +56,12 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py in
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-Then use `/hooks` in Codex CLI to review and trust both definitions. In another fresh task, repeat the opaque-ID proof and make one harmless tool call; a new `_snapshots/events` manifest is the capture proof. In a
+Then use `/hooks` in Codex CLI to review and trust all three definitions. The
+next prompt can prove `UserPromptSubmit` recovery without rotating the task;
+use one fresh task only to prove `SessionStart`, then make one harmless tool
+call so a new `_snapshots/events` manifest proves capture. A missing Canvas ID
+means the optional map is unavailable; it does not make the underlying task
+blocked. In a
 local Codex CLI 0.146.0 acceptance run, plugin MCP and skill discovery worked
 while the plugin-bundled hook did not execute. The explicit installer is the
 compatibility layer; it preserves peer hooks and a hash-addressed backup.

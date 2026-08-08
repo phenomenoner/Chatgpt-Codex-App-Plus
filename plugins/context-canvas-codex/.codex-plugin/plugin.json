@@ -1,7 +1,7 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.3.0",
-  "description": "Bounded task maps plus policy-sanitized historical tool snapshots for Codex App and CLI.",
+  "version": "0.4.0",
+  "description": "Continuable task maps plus policy-sanitized historical tool snapshots for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"
   },
@@ -20,8 +20,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Context Canvas Codex",
-    "shortDescription": "Recover task state and archive historical tool snapshots.",
-    "longDescription": "Keeps bounded task facts and hash-bound evidence pointers separate from a local PostToolUse snapshot store with explicit textual-redaction and opaque-media policies. Snapshots are compressed, content-addressed, deduplicated, excluded from semantic search, time-limited unless pinned, and exportable through an explicit CLI operation.",
+    "shortDescription": "Continue task maps and archive historical tool snapshots.",
+    "longDescription": "Keeps session provenance separate from a continuable semantic task lineage and a local PostToolUse snapshot store. Task maps reopen without destructive mismatch errors, explicit continuation preserves a hash-bound predecessor, and recent canvases plus filtered snapshot history remain discoverable. Snapshots use explicit textual-redaction and opaque-media policies, content addressing, deduplication, bounded retention, and explicit export.",
     "developerName": "phenomenoner",
     "category": "Productivity",
     "capabilities": [
@@ -29,10 +29,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Create a safe checkpoint for this long-running task.",
-      "Restore this task's active blockers after compaction.",
-      "Search this task's Context Canvas and prepare a closeout.",
-      "List historical tool snapshots and export one policy-sanitized payload."
+      "Create or restore the task map for this work, including active blockers after compaction.",
+      "List my recent task canvases and continue the relevant lineage here.",
+      "Search this task map or historical tool snapshots and prepare a closeout or policy-sanitized export."
     ]
   }
 }

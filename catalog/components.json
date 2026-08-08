@@ -8,10 +8,10 @@
       "maturity": "beta",
       "requires": [
         "Codex plugin support",
-        "Codex SessionStart and PostToolUse through native plugin hooks or the explicit user-hook adapter",
+        "Codex SessionStart, UserPromptSubmit, and PostToolUse through native plugin hooks or the explicit user-hook adapter",
         "Python 3.11+ available as python"
       ],
-      "summary": "Keep a semantic task map separate from complete policy-sanitized, content-addressed historical tool snapshots with dedupe, TTL, pinning, bounded MCP metadata, and explicit CLI export."
+      "summary": "Keep hook-derived session identity separate from a continuable semantic task lineage and complete policy-sanitized, content-addressed historical tool snapshots with filtered lookup, dedupe, TTL, pinning, bounded MCP metadata, and explicit CLI export."
     },
     {
       "id": "batch-complete-independent-review",
@@ -19,7 +19,7 @@
       "defaultInstall": true,
       "maturity": "beta",
       "requires": ["Python 3.11+ for deterministic validation"],
-      "summary": "Review a frozen candidate beyond the first blocker, separate actual and counterfactual verdicts, and bind the gate to hashes."
+      "summary": "Continue ordinary reviews through the full finding batch, and reserve fixed-point, counterfactual, hash-bound verdicts for explicit independent or release gates."
     },
     {
       "id": "long-run-supervisor",
@@ -43,7 +43,7 @@
       "defaultInstall": true,
       "maturity": "beta",
       "requires": [],
-      "summary": "Map blast radius and invariants so green tests do not become a false completion claim."
+      "summary": "Choose the lowest test altitude that can falsify a readiness claim and synthesize missing regression evidence without making every change a formal gate."
     },
     {
       "id": "incident-to-regression",

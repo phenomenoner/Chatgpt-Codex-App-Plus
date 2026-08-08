@@ -158,6 +158,114 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn("No Context Canvas checkpoint exists", resume["hookSpecificOutput"]["additionalContext"])
         self.assertFalse(self.root.exists())
 
+    def test_user_prompt_hook_recovers_identity_without_session_start(self) -> None:
+        output = canvas.user_prompt_submit_output(
+            {
+                "session_id": self.session_id,
+                "turn_id": "turn-recovery",
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Continue the current task",
+            },
+            self.store,
+        )
+
+        self.assertEqual(
+            output["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit"
+        )
+        context = output["hookSpecificOutput"]["additionalContext"]
+        self.assertIn(self.canvas_id, context)
+        self.assertIn("turn binding", context.lower())
+        self.assertFalse(self.root.exists(), "identity recovery must remain read-only")
+
+    def test_reopen_mismatch_is_nonfatal_and_read_only(self) -> None:
+        self.initialize(goal="Original durable objective")
+        canvas_path = self.root / self.canvas_id / "canvas.json"
+        before = canvas_path.read_bytes()
+
+        reopened = self.store.initialize(
+            self.canvas_id,
+            goal="A rephrased objective must not replace stored state",
+            project_cwd=str(self.base / "different-workspace"),
+            title="Different title",
+        )
+
+        self.assertTrue(reopened["ok"])
+        self.assertFalse(reopened["created"])
+        self.assertFalse(reopened["matched"])
+        self.assertEqual(
+            {item["field"] for item in reopened["conflicts"]},
+            {"goal", "project_cwd", "title"},
+        )
+        self.assertEqual(canvas_path.read_bytes(), before)
+
+    def test_goal_block_is_rejected_and_legacy_blocked_goal_stays_continuable(self) -> None:
+        self.initialize(goal="The objective stays active while blockers are open")
+        with self.assertRaisesRegex(canvas.CanvasError, "blocker node"):
+            self.store.set_status(
+                self.canvas_id,
+                node_id="N000001",
+                status_value="blocked",
+                evidence_refs=[{"pointer": "blocked.md", "sha256": "b" * 64}],
+            )
+
+        canvas_path = self.root / self.canvas_id / "canvas.json"
+        legacy = json.loads(canvas_path.read_text(encoding="utf-8"))
+        legacy["version"] = 2
+        for field in (
+            "lineage_id",
+            "predecessor_canvas_id",
+            "predecessor_canvas_sha256",
+            "objective_state",
+        ):
+            legacy.pop(field, None)
+        legacy["nodes"][0]["status"] = "blocked"
+        legacy["nodes"][0]["evidence_refs"] = [
+            {"pointer": "legacy-blocked.md", "sha256": "c" * 64}
+        ]
+        canvas_path.write_text(json.dumps(legacy), encoding="utf-8")
+
+        loaded = self.store.read(self.canvas_id)
+        assert loaded is not None
+        self.assertEqual(loaded["objective_state"], "active")
+        self.assertEqual(loaded["nodes"][0]["status"], "active")
+
+    def test_continue_creates_hash_bound_lineage_without_mutating_predecessor(self) -> None:
+        self.initialize(goal="Carry the semantic task map into a fresh session")
+        self.store.add_node(
+            self.canvas_id,
+            kind="blocker",
+            status_value="active",
+            summary="Live lifecycle pickup still needs field observation",
+        )
+        predecessor_path = self.root / self.canvas_id / "canvas.json"
+        predecessor_before = predecessor_path.read_bytes()
+        successor_id = canvas.derive_canvas_id("thread-test-successor")
+
+        continued = self.store.continue_from(
+            successor_id,
+            predecessor_canvas_id=self.canvas_id,
+        )
+
+        self.assertTrue(continued["created"])
+        self.assertEqual(predecessor_path.read_bytes(), predecessor_before)
+        successor = self.store.read(successor_id)
+        predecessor = self.store.read(self.canvas_id)
+        assert successor is not None and predecessor is not None
+        self.assertEqual(successor["lineage_id"], predecessor["lineage_id"])
+        self.assertEqual(successor["predecessor_canvas_id"], self.canvas_id)
+        self.assertEqual(
+            successor["predecessor_canvas_sha256"],
+            canvas.canvas_sha256(predecessor),
+        )
+        self.assertEqual(successor["nodes"], predecessor["nodes"])
+
+        listed = self.store.list_canvases(limit=8)
+        self.assertEqual(listed["canvases"][0]["canvas_id"], successor_id)
+        by_id = {item["canvas_id"]: item for item in listed["canvases"]}
+        self.assertEqual(by_id[self.canvas_id]["session_state"], "continued")
+        self.assertEqual(by_id[successor_id]["session_state"], "available")
+        self.assertTrue(by_id[successor_id]["continuable"])
+
     def test_lifecycle_summary_is_bounded_to_less_than_five_kibibytes(self) -> None:
         self.initialize(goal="目標" * 190)
         for index in range(8):
@@ -466,9 +574,45 @@ class ContextCanvasTests(unittest.TestCase):
         )
         self.assertFalse(self.root.exists())
 
-    def test_plugin_exposes_session_restore_post_tool_capture_and_bundled_mcp(self) -> None:
+        prompt_sentinel = "PROMPT_SECRET_MUST_NOT_BE_ECHOED_123456"
+        prompt_result = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-user-prompt-submit"],
+            input=json.dumps(
+                {
+                    "session_id": self.session_id,
+                    "turn_id": "turn-hook-cli",
+                    "hook_event_name": "UserPromptSubmit",
+                    "prompt": "Bearer " + prompt_sentinel,
+                }
+            ),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        self.assertEqual(prompt_result.returncode, 0, prompt_result.stderr)
+        prompt_output = json.loads(prompt_result.stdout)
+        self.assertEqual(
+            prompt_output["hookSpecificOutput"]["hookEventName"], "UserPromptSubmit"
+        )
+        self.assertIn(
+            self.canvas_id,
+            prompt_output["hookSpecificOutput"]["additionalContext"],
+        )
+        self.assertNotIn(prompt_sentinel, prompt_result.stdout + prompt_result.stderr)
+        self.assertFalse(self.root.exists())
+
+    def test_plugin_exposes_turn_binding_session_restore_capture_and_bundled_mcp(self) -> None:
         payload = json.loads((PLUGIN_ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
-        self.assertEqual(set(payload["hooks"]), {"SessionStart", "PostToolUse"})
+        self.assertEqual(
+            set(payload["hooks"]),
+            {"SessionStart", "UserPromptSubmit", "PostToolUse"},
+        )
         group = payload["hooks"]["SessionStart"]
         self.assertEqual(len(group), 1)
         self.assertEqual(group[0]["matcher"], "^(startup|resume|clear|compact)$")
@@ -486,6 +630,13 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn("hook-post-tool-use", capture_handler["command"])
         self.assertIn("hook-post-tool-use", capture_handler["commandWindows"])
         self.assertNotIn("additionalContextLimit", capture_handler)
+        prompt_group = payload["hooks"]["UserPromptSubmit"]
+        self.assertEqual(len(prompt_group), 1)
+        self.assertNotIn("matcher", prompt_group[0])
+        prompt_handler = prompt_group[0]["hooks"][0]
+        self.assertIn("hook-user-prompt-submit", prompt_handler["command"])
+        self.assertIn("hook-user-prompt-submit", prompt_handler["commandWindows"])
+        self.assertLessEqual(prompt_handler["additionalContextLimit"], 1000)
         mcp_config = json.loads((PLUGIN_ROOT / ".mcp.json").read_text(encoding="utf-8"))
         server = mcp_config["mcpServers"]["context-canvas"]
         self.assertEqual(server["command"], "python")
@@ -556,6 +707,7 @@ class ContextCanvasTests(unittest.TestCase):
             (pristine_home / "hooks.json").read_text(encoding="utf-8")
         )
         self.assertEqual(len(pristine_hooks["hooks"]["SessionStart"]), 1)
+        self.assertEqual(len(pristine_hooks["hooks"]["UserPromptSubmit"]), 1)
         self.assertEqual(len(pristine_hooks["hooks"]["PostToolUse"]), 1)
         run("uninstall", home=pristine_home)
 
@@ -578,6 +730,28 @@ class ContextCanvasTests(unittest.TestCase):
         run("install", expected=1, home=foreign_interrupted_home)
         self.assertEqual(
             foreign_interrupted_script.read_text(encoding="utf-8"), "foreign bytes"
+        )
+
+        v2_home = self.base / "v2-codex-home"
+        run("install", home=v2_home)
+        v2_hooks_path = v2_home / "hooks.json"
+        v2_hooks = json.loads(v2_hooks_path.read_text(encoding="utf-8"))
+        v2_hooks["hooks"]["UserPromptSubmit"] = []
+        v2_hooks_path.write_text(json.dumps(v2_hooks), encoding="utf-8")
+        v2_manifest_path = v2_home / "context-canvas-codex" / "hook-install.json"
+        v2_manifest = json.loads(v2_manifest_path.read_text(encoding="utf-8"))
+        v2_manifest["schema"] = "context-canvas-codex-hook-install.v2"
+        v2_manifest["handlers_sha256"].pop("UserPromptSubmit")
+        v2_manifest_path.write_text(json.dumps(v2_manifest), encoding="utf-8")
+        _, migrated_v2 = run("install", home=v2_home)
+        self.assertTrue(migrated_v2["changed"])
+        self.assertEqual(
+            json.loads(v2_manifest_path.read_text(encoding="utf-8"))["schema"],
+            "context-canvas-codex-hook-install.v3",
+        )
+        self.assertEqual(
+            len(json.loads(v2_hooks_path.read_text(encoding="utf-8"))["hooks"]["UserPromptSubmit"]),
+            1,
         )
 
         legacy_home = self.base / "legacy-codex-home"
@@ -619,7 +793,7 @@ class ContextCanvasTests(unittest.TestCase):
             legacy_manifest_path.read_text(encoding="utf-8")
         )
         self.assertEqual(
-            migrated_manifest["schema"], "context-canvas-codex-hook-install.v2"
+            migrated_manifest["schema"], "context-canvas-codex-hook-install.v3"
         )
         self.assertTrue(run("check", home=legacy_home)[1]["ok"])
 
@@ -666,6 +840,7 @@ class ContextCanvasTests(unittest.TestCase):
         hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
         self.assertEqual(hooks["hooks"]["SessionStart"][0], existing_group)
         self.assertEqual(len(hooks["hooks"]["SessionStart"]), 2)
+        self.assertEqual(len(hooks["hooks"]["UserPromptSubmit"]), 1)
         self.assertEqual(len(hooks["hooks"]["PostToolUse"]), 1)
         handler = hooks["hooks"]["SessionStart"][1]["hooks"][0]
         canonical_script = codex_home.resolve(strict=False) / "context-canvas-codex" / "context_canvas.py"
@@ -690,6 +865,7 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertTrue(removed["changed"])
         hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
         self.assertEqual(hooks["hooks"]["SessionStart"], [existing_group])
+        self.assertEqual(hooks["hooks"]["UserPromptSubmit"], [])
         self.assertEqual(hooks["hooks"]["PostToolUse"], [])
         self.assertFalse(installed_script.exists())
 
@@ -795,7 +971,7 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertFalse(shown["raw_evidence_supported"])
         self.assertEqual(len(shown["canvas"]["nodes"]), 2)
 
-    def test_v1_canvas_migrates_in_memory_then_persists_v2_on_mutation(self) -> None:
+    def test_v1_canvas_migrates_in_memory_then_persists_current_schema_on_mutation(self) -> None:
         self.initialize()
         path = self.root / self.canvas_id / "canvas.json"
         current = json.loads(path.read_text(encoding="utf-8"))
@@ -1007,6 +1183,8 @@ class ContextCanvasTests(unittest.TestCase):
             self.assertTrue(
                 {
                     "canvas_start",
+                    "canvas_continue",
+                    "canvas_list",
                     "canvas_upsert_node",
                     "canvas_read",
                     "canvas_search",
@@ -2120,6 +2298,72 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         self.assertEqual(completed.stdout, "")
         self.assertIn("capture unavailable", completed.stderr.lower())
         self.assertEqual(self.snapshots.list_events(canvas_id=self.canvas_id)["events"], [])
+
+    def test_snapshot_list_filters_and_cursor_keep_large_history_findable(self) -> None:
+        first = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-filter-1",
+                tool_name="shell_command",
+                response={"text": "first"},
+            )
+        )
+        second = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-filter-2",
+                tool_name="mcp__web__open",
+                response={"text": "second"},
+            )
+        )
+        third = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-filter-3",
+                tool_name="shell_command",
+                response={"text": "third"},
+            )
+        )
+        self.snapshots.pin(third["sha256"], reason="cursor filter test")
+
+        shell_events = self.snapshots.list_events(
+            canvas_id=self.canvas_id,
+            tool_name="shell_command",
+            capture_status="stored",
+            limit=10,
+        )
+        self.assertEqual(shell_events["count"], 2)
+        self.assertTrue(
+            all(item["tool_name"] == "shell_command" for item in shell_events["events"])
+        )
+        pinned = self.snapshots.list_events(
+            canvas_id=self.canvas_id,
+            pinned=True,
+            limit=10,
+        )
+        self.assertEqual([item["event_id"] for item in pinned["events"]], [third["event_id"]])
+
+        page_one = self.snapshots.list_events(canvas_id=self.canvas_id, limit=1)
+        self.assertEqual(page_one["returned_count"], 1)
+        self.assertIsNotNone(page_one["next_cursor"])
+        page_two = self.snapshots.list_events(
+            canvas_id=self.canvas_id,
+            cursor=page_one["next_cursor"],
+            limit=1,
+        )
+        self.assertEqual(page_two["returned_count"], 1)
+        self.assertNotEqual(
+            page_one["events"][0]["event_id"], page_two["events"][0]["event_id"]
+        )
+        self.assertEqual(
+            {first["event_id"], second["event_id"], third["event_id"]},
+            {
+                page_one["events"][0]["event_id"],
+                page_two["events"][0]["event_id"],
+                self.snapshots.list_events(
+                    canvas_id=self.canvas_id,
+                    cursor=page_two["next_cursor"],
+                    limit=1,
+                )["events"][0]["event_id"],
+            },
+        )
 
     def test_concurrent_hook_processes_dedupe_one_object_without_lost_events(self) -> None:
         processes: list[subprocess.Popen[str]] = []

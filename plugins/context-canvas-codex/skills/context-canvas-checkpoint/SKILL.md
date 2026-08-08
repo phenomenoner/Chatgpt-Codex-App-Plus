@@ -11,10 +11,12 @@ operations. Fall back to `scripts/context_canvas.py` with Python isolated mode
 when the MCP server is unavailable. Resolve this skill's directory first; the
 script is two levels above it.
 
-Never guess an opaque canvas ID from a workspace name. The trusted
-`SessionStart` hook supplies the ID derived from the exact Codex session ID.
-If a fresh task has no hook-supplied ID, stop instead of initializing a canvas
-under a guessed identity. Report the activation gap. Installing or repairing
+Never guess an opaque canvas ID from a workspace name. Trusted `SessionStart`
+and `UserPromptSubmit` hook inputs supply the ID derived from the exact Codex
+session ID. The turn hook lets an already-running task recover its binding on a
+later prompt after hook activation; it does not guess or copy an earlier ID. If
+a task has no hook-supplied ID, stop instead of initializing a canvas under a
+guessed identity. Report the activation gap. Installing or repairing
 the user-level compatibility hook is an explicit operator action through
 `scripts/install_context_canvas_hook.py`; do not perform it merely because this
 skill was selected.
@@ -28,7 +30,16 @@ pointer merely because it appears in the checkpoint.
 
 If the hook reports no initialized checkpoint, continue normally. Do not create
 one automatically. Startup and clear events expose identity only; resume and
-compact may restore bounded state.
+compact may restore bounded state; each user prompt refreshes only a small
+identity/lineage binding.
+
+Use `canvas_list` when prior task maps must be discovered. It sorts by semantic
+update time and reports objective state, lineage, predecessor/successors, open
+blocker count, and whether a map is continuable. Continue a map only with an
+explicit `canvas_continue(current_id, predecessor_id)` call. That copies the
+bounded semantic map into the current hook-provided ID, preserves the predecessor
+unchanged, and records its canonical SHA-256. Never auto-select a predecessor
+from cwd alone.
 
 ## Write an intentional checkpoint
 
@@ -39,7 +50,8 @@ handoff. Keep the repository WAL or handoff authoritative.
 With MCP, use this sequence:
 
 1. `canvas_start` with the hook-provided `canvas_id`, bounded goal, and workspace
-   metadata.
+   metadata. Reopening an existing ID never overwrites it: exact input reports a
+   match, while differing input returns a nonfatal conflict list for review.
 2. `canvas_upsert_node` for short plan, question, assumption, blocker, finding,
    action, decision, or verification nodes.
 3. For factual terminal nodes, include one or more `evidence_refs`, each with a
@@ -55,6 +67,8 @@ Equivalent CLI examples:
 
 ```powershell
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" init --canvas-id <opaque-id> --goal "<bounded-goal>" --cwd "<absolute-workspace>"
+python -I "<skill-dir>\..\..\scripts\context_canvas.py" list --limit 8 --cwd "<absolute-workspace>"
+python -I "<skill-dir>\..\..\scripts\context_canvas.py" continue --canvas-id <current-opaque-id> --predecessor-canvas-id <prior-opaque-id>
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" upsert --canvas-id <opaque-id> --kind blocker --status blocked --summary "<bounded-blocker>" --evidence-pointer "<wal-or-receipt-path>" --evidence-sha256 <sha256>
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" upsert --canvas-id <opaque-id> --kind verification --status done --summary "<verified-claim>" --evidence-pointer "<receipt-path>" --evidence-sha256 <sha256> --depends-on <node-id>
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" search "<query>" --canvas-id <opaque-id>
@@ -67,6 +81,7 @@ reconstruction:
 
 ```powershell
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" snapshot-export --canvas-id <opaque-id> --event-id <obs-id> --output <absolute-json-path>
+python -I "<skill-dir>\..\..\scripts\context_canvas.py" snapshot-list --canvas-id <opaque-id> --tool-name shell_command --capture-status stored --limit 20
 ```
 
 An export answers what Codex received then. Revalidate the live source before
@@ -85,11 +100,14 @@ signal that must remain visible.
 - Nonfactual kinds: `plan`, `question`, `assumption`.
 - Factual states `blocked`, `done`, `superseded`, `verify`, and `deprecated`
   require hash-bound evidence.
+- Objective state is separate: `active`, `completed`, or `abandoned`. A goal
+  cannot be `blocked`; keep the objective active and create a blocker node.
 - Store pointers plus SHA-256 in semantic nodes, not evidence contents. The
   automatic snapshot cache is a separate storage layer and is not Canvas node
   content.
-- A v1 canvas may be restored without a rewrite. Its next intentional mutation
-  persists v2.
+- A v1 or v2 canvas may be restored without a rewrite. Its next intentional
+  mutation persists v3. A legacy blocked goal is interpreted as an active
+  objective while retaining its evidence references.
 
 Before each write:
 
@@ -114,7 +132,9 @@ Before each write:
 - It does not replace Codex task history, native memory, repository WALs,
   release evidence, or handoffs.
 - Project `cwd` is metadata only. It is never an identity or authorization key.
-- A checkpoint from another opaque ID cannot substitute for this task.
+- A checkpoint from another opaque ID cannot substitute for this task. Explicit
+  `canvas_continue` creates a new current-ID copy with stable lineage and a
+  hash-bound predecessor; it never reuses the predecessor as execution identity.
 - The bundled MCP server is local stdio only and does not add network access.
 
 ## Pilot and retirement

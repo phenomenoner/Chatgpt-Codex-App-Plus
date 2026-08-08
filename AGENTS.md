@@ -14,12 +14,9 @@
 ## Changes and verification
 
 - Edit authored repository files intentionally. Use `scripts/public_sync.py sync --apply` only for manifest-authorized mechanical refreshes.
-- For exporter or scanner behavior changes, add a fail-first regression test. Credential findings must remain non-exemptible.
-- Before a completion or publication claim, run:
-  - `python -m unittest discover -s tests -v`
-  - vendored deterministic component checks relevant to the diff
-  - `python scripts/public_sync.py validate`
-  - `git diff --check`
+- For an existing exporter or scanner defect, add a discriminating regression and demonstrate fail-first when the old behavior is safely reproducible. Credential findings must remain non-exemptible.
+- Before a completion or publication claim, run the focused repository and vendored component checks that can falsify the changed behavior, `python scripts/public_sync.py validate`, and `git diff --check`.
+- Run the full repository suite only when exporter/scanner infrastructure, shared schemas or catalogs, release-wide behavior, or a remaining coverage gap makes the blast radius repository-wide.
 - Read the full public diff after scanners pass. Replace private shorthand with behavior, impact, verification, and honest limitations.
 
 ## Publishing

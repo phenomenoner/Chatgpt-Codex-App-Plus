@@ -91,7 +91,8 @@ The hidden `hook-post-tool-use` command captures observations and exits without 
 
 Operator interfaces provide:
 
-- bounded manifest listing and inspection;
+- bounded manifest listing and inspection with exact tool-name, capture-status,
+  pin-state, and stable event-cursor filters;
 - explicit complete policy-sanitized export to a caller-selected file;
 - explicit pinning;
 - dry-run-first retention garbage collection with exact candidate identities and interruption recovery; and
@@ -117,6 +118,6 @@ The implementation is accepted only with focused evidence for:
 - automatic transitive-integrity pin promotion and expiry-safe garbage collection;
 - exact GC preview, orphan sweep, pending-plan recovery, and corrupt-graph preflight before mutation;
 - corruption, nested-alias, manifest-identity, oversize, and concurrent-writer behavior;
-- installer merge/uninstall, exact legacy owner-digest migration, drift refusal, and interrupted-install recovery for both `SessionStart` and `PostToolUse` handlers;
+- installer merge/uninstall, exact legacy owner-digest migration, drift refusal, and interrupted-install recovery for `SessionStart`, `UserPromptSubmit`, and `PostToolUse` handlers;
 - MCP message bounds and CLI error behavior; and
 - measured hook latency and compression ratios on representative small and large payloads.

@@ -6,16 +6,23 @@
 - Preserve unrelated user work. Do not reset, clean, overwrite, or publish material outside the requested scope.
 - Keep final synthesis, conflict resolution, and verification ownership with the main agent.
 
-## Development completeness
+## Optional Context Canvas
 
-- Before claiming software work is done, use `completeness-and-test-synthesis` or apply the same method manually: classify blast radius, map affected invariants, gather fresh evidence at the correct tier, and disclose remaining gaps.
-- Use the lowest verification altitude that can falsify the changed behavior. Prefer focused unit and contract tests while editing; run broader scenario or repository suites once at a justified freeze boundary.
+- Treat Context Canvas as a semantic map and snapshot index, not permission to work. A missing hook identity or uninitialized canvas must not block an otherwise authorized task.
+- Use only a trusted hook-injected opaque identity. Continue without Canvas when it is unavailable; use explicit lineage when a new session should inherit an old map.
+
+## Evidence-driven development
+
+- For a local change, run the smallest discriminating check that can falsify the changed behavior. Do not require a plan, WAL, handoff, matrix, or reviewer merely to declare ordinary work complete.
+- Use `completeness-and-test-synthesis` for an explicit readiness judgment, recurring regression, cross-component/lifecycle change, green-tests-but-broken-real-use failure, or material evidence gap.
+- Prefer fail-first for a safe, reproducible existing bug. It is not mandatory for net-new, documentation/mechanical, already-failing, or unsafe/unavailable pre-change cases.
+- Use T2 for a touched real seam, T3 only when a lifecycle or user scenario cannot be represented lower, and T4 only for an authorized live/external claim. Run a full suite only for a release-wide blast radius or unresolved coverage gap.
 - Treat timeouts, output loss, stale receipts, and zero-match filters as unverified rather than passing.
 
 ## Review gates
 
-- When the user asks for a code, diff, patch, pull-request, independent, final, release, migration, or pre-cutover review—or a project contract requires one—use `batch-complete-independent-review` as the default methodology. Ordinary implementation does not automatically trigger a reviewer loop.
-- Continue after the first blocker. Record narrow repair postconditions, reopen dependent coverage cells, and stop only at coverage closure or an explicit incomplete condition.
+- For an ordinary code, diff, patch, or pull-request review, inspect the change and sibling paths directly and continue after the first finding. Do not require formal gate artifacts.
+- Use `batch-complete-independent-review` formal mode only for an explicitly independent/final/release/migration/pre-cutover decision, a project gate, or recurring sibling blockers.
 - Keep the actual frozen-candidate verdict separate from counterfactual analysis. `PASS_UNDER_ASSUMPTIONS` is not an actual `PASS` and cannot authorize merge, release, deployment, or cutover.
 - Preserve provider-specific authorization. In particular, use the Claude adapter only when the user explicitly asks to invoke Claude.
 

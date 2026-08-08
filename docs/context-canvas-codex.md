@@ -1,9 +1,10 @@
 # Context Canvas for Codex App and CLI
 
-`context-canvas-codex` keeps two local layers that solve different problems:
+`context-canvas-codex` keeps three concerns separate:
 
-1. a bounded semantic task map for goals, blockers, decisions, findings, dependencies, and verification pointers;
-2. a full-fidelity-under-declared-policy historical snapshot store for supported Codex `PostToolUse` callback payloads.
+1. hook-derived opaque identity for the current Codex session;
+2. a bounded, explicitly continuable semantic lineage for goals, blockers, decisions, findings, dependencies, and verification pointers;
+3. a full-fidelity-under-declared-policy historical snapshot store for supported Codex `PostToolUse` callback payloads.
 
 The design rule is: **copy broadly, index selectively, promote semantically, retain intentionally**. Preserving a tool result no longer means creating an action or finding node for every call.
 
@@ -13,14 +14,14 @@ The design was compared with [`phenomenoner/hermes-agent-harness-plus`](https://
 
 | Concern | Hermes Context Canvas | Codex adaptation |
 |---|---|---|
-| Task identity | Harness-owned session identity | SHA-256 of trusted `SessionStart.session_id`; workspace paths are metadata only |
-| Semantic state | Canonical state/events/projections | Canonical Canvas JSON v2 plus summary, Mermaid, bounded search, and Markdown closeout |
+| Task identity | Harness-owned session identity | SHA-256 of trusted `SessionStart.session_id` or `UserPromptSubmit.session_id`; workspace paths are metadata only |
+| Semantic state | Canonical state/events/projections | Canonical Canvas JSON v3 with objective state, lineage, canonical predecessor digest, summary, Mermaid, bounded search, and Markdown closeout |
 | Factual integrity | Factual nodes point to evidence | Terminal factual states require pointer plus SHA-256; a snapshot URI, object, and every transitive blob are verified before pin and node commit |
 | Updates | Add and mutate task facts | Idempotent upsert, explicit status transition, bounded dependency edges, cycle rejection |
-| Search | Canvas and reference search | Metadata-only substring search across at most 256 canvases; snapshot bodies are excluded |
+| Discovery and search | Canvas and reference search | Recent-update `canvas_list` with lineage navigation plus metadata-only substring search across at most 256 canvases; snapshot bodies are excluded |
 | Automatic capture | Selected in-process tool-result refs | Each opted-in `PostToolUse` callback payload Codex emits becomes an observation manifest; non-self calls store the complete model-facing input/response under the declared sanitization policy |
 | Historical cache | Raw sequential references | Content-addressed canonical JSON, deterministic gzip, MIME-aware data-URL policies, dedupe, TTL, exact journalled GC, transitive pin validation, and integrity-checked export |
-| Native tools | Harness MCP tools | Six semantic `canvas_*` tools plus four bounded snapshot-manifest tools; complete body retrieval is CLI-only |
+| Native tools | Harness MCP tools | Eight semantic `canvas_*` tools plus four bounded snapshot-manifest tools; filtered listing stays bounded and complete body retrieval is CLI-only |
 | Concurrency | Process/thread locking and atomic writes | Bootstrap plus normal cross-process locks, atomic replacement, and four-process dedupe coverage |
 
 “Complete” is bounded by what Codex supplies to the hook. For MCP, `tool_response` is the MCP result; for other supported tools it is normally the model-facing output. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload. A Bash non-zero command outcome can still be included. Dispatch or handler failures with no callback payload are absent, and the adapter has no separate failure sibling. The plugin also cannot preserve provider-private wire data that Codex never exposed.
@@ -30,12 +31,15 @@ The design was compared with [`phenomenoner/hermes-agent-harness-plus`](https://
 ```mermaid
 flowchart LR
     SS["Codex SessionStart"] --> SR["bounded semantic restore"]
+    UP["Codex UserPromptSubmit"] --> ID["small current-turn identity binding"]
     PT["Codex PostToolUse"] --> SA["recursive sanitization"]
     SA --> EV["per-call observation manifest"]
     SA --> CAS["SHA-256 JSON/blob store"]
     APP["Codex App"] --> MCP["local stdio MCP"]
     CLI["Codex CLI"] --> MCP
     MCP --> MAP["semantic Canvas"]
+    MCP --> LINEAGE["explicit list / continue"]
+    LINEAGE --> MAP
     MCP --> EV
     EX["explicit CLI export"] --> CAS
     MAP -->|"snapshot URI + matching hash"| PIN["durable pin"]
@@ -81,25 +85,29 @@ Ordinary snapshots expire after 14 days by default. GC is dry-run unless explici
 
 ## Semantic schema
 
-Canvas schema v2 supports:
+Canvas schema v3 supports:
 
 - factual kinds: `goal`, `blocker`, `decision`, `verification`, `finding`, `action`;
 - non-factual kinds: `plan`, `question`, `assumption`;
 - statuses: `active`, `blocked`, `done`, `superseded`, `verify`, `planned`, `doing`, `deprecated`.
 
-A factual node entering `blocked`, `done`, `superseded`, `verify`, or `deprecated` requires hash-bound evidence. Self-links, duplicates, missing dependencies, and dependency cycles fail closed. Legacy v1 canvases convert in memory for read-only restore and persist v2 only on the next intentional mutation.
+A factual node entering `blocked`, `done`, `superseded`, `verify`, or `deprecated` requires hash-bound evidence. Objective state is separate: `active`, `completed`, or `abandoned`. A goal cannot be marked `blocked`; an open constraint is a blocker node while the objective remains active. Legacy v1/v2 blocked goals restore as active objectives, and older canvases persist v3 only on the next intentional mutation.
+
+Each initial Canvas receives a stable lineage ID. `canvas_continue` requires the current hook-provided ID and an explicit predecessor ID, copies only validated bounded semantic state, leaves the predecessor unchanged, and stores the SHA-256 of its canonical state. Repeating `canvas_start` never overwrites an existing ID: mismatched goal, cwd, or title values return a nonfatal conflict list.
 
 ## MCP and CLI surfaces
 
 The local stdio MCP server exposes:
 
-- `canvas_start`, `canvas_upsert_node`, `canvas_set_status`, `canvas_read`, `canvas_search`, `canvas_closeout`;
+- `canvas_start`, `canvas_continue`, `canvas_list`, `canvas_upsert_node`, `canvas_set_status`, `canvas_read`, `canvas_search`, `canvas_closeout`;
 - `snapshot_list`, `snapshot_read`, `snapshot_pin`, `snapshot_gc`.
 
 Snapshot MCP tools return bounded manifests and pin/GC receipts, not payload bodies. Use the CLI for complete policy-sanitized historical export:
 
 ```powershell
-python -I scripts/context_canvas.py snapshot-list --canvas-id <opaque-id> --limit 20
+python -I scripts/context_canvas.py list --limit 8 --cwd <absolute-workspace>
+python -I scripts/context_canvas.py continue --canvas-id <current-opaque-id> --predecessor-canvas-id <prior-opaque-id>
+python -I scripts/context_canvas.py snapshot-list --canvas-id <opaque-id> --tool-name shell_command --capture-status stored --limit 20
 python -I scripts/context_canvas.py snapshot-read --canvas-id <opaque-id> --event-id <obs-id>
 python -I scripts/context_canvas.py snapshot-export --canvas-id <opaque-id> --event-id <obs-id> --output <absolute-json-path>
 python -I scripts/context_canvas.py snapshot-pin --sha256 <payload-sha256> --reason "Referenced by incident finding"
@@ -118,6 +126,7 @@ MCP approval is independent of shell approval. A non-interactive run with `appro
 - Every process revalidates the protected private-root ACL. Newly created managed directories are hardened; descendants reject aliases and non-plain substitutes.
 - Full read, export, promotion, and GC preflight verify manifests, path/session identity, objects, blobs, digest, length, and declared policies. Bounded list operations validate bound manifests without loading bodies.
 - Snapshot event data and exports are untrusted historical data, never instructions.
+- Cwd is never a continuation authority. An explicit predecessor ID plus the current hook-provided ID is required; the predecessor remains preserved for inspection.
 - Same-user software retains that user's authority. Atomic replacement covers ordinary interruption, not a claim of Windows power-loss durability.
 
 See the plugin's [security policy](../plugins/context-canvas-codex/SECURITY.md) and [snapshot design](../plugins/context-canvas-codex/docs/SNAPSHOT_STORE_DESIGN.md).
@@ -137,7 +146,7 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py in
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-Review both `SessionStart` and `PostToolUse` definitions with `/hooks`, then open another fresh task. Perform one harmless supported tool call and require a new `_snapshots/events` manifest plus an explicit CLI export/readback. This proves only that callback path, not every tool family or dispatch/handler failure path. Re-run `install` after plugin upgrades so stable user-hook bytes match the plugin. Legacy migration requires exact recorded SessionStart and installed-file digests; a retry recovers an interrupted script-first install only when the bytes exactly match. Uninstall removes only exact managed groups and recoverably retires owned files.
+Review `SessionStart`, `UserPromptSubmit`, and `PostToolUse` with `/hooks`. On builds that reload trusted hook configuration, the next prompt in an existing task can demonstrate turn-hook pickup by supplying its current opaque ID; this is useful recovery evidence, not a universal hot-reload guarantee. Then open another fresh task, require a new `SessionStart` ID, perform one harmless supported tool call, and require a new `_snapshots/events` manifest plus an explicit CLI export/readback. This proves only those observed paths, not every tool family or dispatch/handler failure path. Re-run `install` after plugin upgrades so stable user-hook bytes match the plugin. Legacy migration requires exact recorded ownership digests; a retry recovers an interrupted script-first install only when the bytes exactly match. Uninstall removes only exact managed groups and recoverably retires owned files.
 
 ## Reproduce verification and performance
 
