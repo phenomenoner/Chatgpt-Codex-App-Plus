@@ -52,6 +52,13 @@ Build required cells from these dimensions:
 - required T0-T4 evidence tier;
 - source and executable evidence.
 
+Each row is atomic and names exactly one contract, entrypoint, operation,
+lifecycle phase, adversarial variant, expected behavior, and required evidence
+tier. Do not bind composite rows such as "all crash phases" or "all stale and
+foreign variants." If semantic review discovers a required subcell that the
+matrix omitted, record a matrix gap, return an incomplete finding-set status,
+and rebind before any lane can claim `BATCH_COMPLETE`.
+
 Allowed cell status:
 
 - `COVERED_NO_FINDING`;
@@ -77,6 +84,12 @@ must be explicit. `NOT_APPLICABLE` requires an evidence-backed reason.
 PASS requires zero required `EVIDENCE_GAP`, `UNVISITED`, `WRONG_TIER`,
 `UNSUPPORTED`, and `OPEN` cells. Writing 22 dispositions for 22 cells proves
 visitation, not closure.
+
+Use `EVIDENCE_CLOSURE_INCOMPLETE` when a supported blocker establishes actual
+`BLOCKED` but required evidence tiers, safe sibling dispositions, or reopen
+obligations remain open. Keep the counterfactual verdict `UNRESOLVED`. This
+preserves known candidate truth without laundering partial coverage into a
+complete repair batch.
 
 Treat the four levels as non-equivalent:
 
