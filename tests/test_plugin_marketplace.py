@@ -27,7 +27,13 @@ class PluginMarketplaceContractTests(unittest.TestCase):
             (plugin_root / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8")
         )
         self.assertEqual(manifest["name"], "context-canvas-codex")
-        self.assertEqual(manifest["version"], "0.4.0")
+        base_version, separator, build_metadata = manifest["version"].partition("+")
+        self.assertEqual(base_version, "0.4.0")
+        self.assertEqual(separator, "+")
+        self.assertRegex(
+            build_metadata,
+            r"^codex\.[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*$",
+        )
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
         self.assertLessEqual(len(manifest["interface"]["defaultPrompt"]), 3)
 

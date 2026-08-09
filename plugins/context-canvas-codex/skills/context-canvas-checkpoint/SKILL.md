@@ -128,9 +128,17 @@ Before each write:
   memory dumps into semantic node summaries. Automatic snapshots are policy-sanitized
   separately and remain outside semantic search.
 - Keep summaries factual and short. Mark uncertainty explicitly.
-- Stop if the CLI or MCP tool reports an ACL, alias, locking, validation,
-  dependency, protocol, or corruption failure. Do not weaken the guard or choose
-  another identity.
+- An invalid semantic-node mutation (including summary, evidence, status, or
+  dependency validation) fails closed for that mutation only. Do not weaken the
+  guard, choose another identity, abandon the existing Canvas, or disable its
+  independent automatic `PostToolUse` snapshot capture. Correct the input or
+  make a later valid checkpoint.
+- An ACL, alias, locking, protocol, or corruption failure is a storage-boundary
+  failure: preserve it for inspection and do not route around it with another
+  identity or path. It does not authorize reading evidence targets. Snapshot
+  capture remains a separately guarded, fail-open archival path: it records a
+  callback only when its own sanitization and storage checks pass, and never
+  replaces the original tool result.
 
 ## Boundaries
 
@@ -154,6 +162,16 @@ drops by at least 30%, raw evidence rereads drop by at least 25%,
 goal/invariant/hash/blocker recall is 100%, leakage/corruption/cross-task mixing
 stays at zero, and maintenance remains at or below three minutes per milestone.
 
-If any threshold fails, disable the MCP server, skill, and hook, then archive
-the plugin and data directories recoverably. Do not delete evidence pointers or
-referenced WALs as part of retirement.
+Treat a missed pilot threshold as a diagnosis and remediation signal, not an
+automatic retirement trigger. Preserve the policy-sanitized `PostToolUse`
+snapshot capture and its existing historical snapshots by default while
+investigating task mix, recovery workflow, measurement, or implementation.
+If a bounded downgrade is necessary, limit it to the affected optional surface;
+do not disable automatic snapshot capture merely because a utility threshold was
+missed.
+
+Only a concrete security or integrity boundary failure (such as ACL, alias,
+locking, stored-schema/digest, protocol, or corruption failure) justifies
+automatically disabling the affected surface. A full retirement remains an
+explicit decision: archive plugin and data directories recoverably, and do not
+delete evidence pointers or referenced WALs.
