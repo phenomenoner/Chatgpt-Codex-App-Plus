@@ -1,4 +1,4 @@
 interface:
   display_name: "Context Canvas Checkpoint"
-  short_description: "Maintain compact evidence-backed task checkpoints"
-  default_prompt: "Use $context-canvas-checkpoint to record or restore this task checkpoint."
+  short_description: "Checkpoint long tool calls and durable task state"
+  default_prompt: "Use $context-canvas-checkpoint to initialize or restore this task's compact evidence-backed map, including automatic initialization before any tool call expected to exceed five minutes; if hook identity is missing, remind the user to check first-install manual approval in /hooks."

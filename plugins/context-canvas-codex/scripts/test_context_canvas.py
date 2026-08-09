@@ -644,8 +644,27 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertEqual(server["cwd"], ".")
         manifest = json.loads((PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
+        self.assertIn("exceed five minutes", manifest["interface"]["defaultPrompt"][0])
+        self.assertIn("manually approve", manifest["interface"]["defaultPrompt"][1])
+        self.assertIn("/hooks", manifest["interface"]["defaultPrompt"][1])
         self.assertFalse((PLUGIN_ROOT / ".app.json").exists())
         self.assertFalse((PLUGIN_ROOT / "assets").exists())
+        readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn("codex mcp add context-canvas -- $python -B -I $server", readme)
+        self.assertIn("absolute paths for both `command` and the server script", readme)
+        self.assertIn("Keep one MCP registration authority", readme)
+        self.assertRegex(readme, r"Never\s+leave both registrations active")
+
+    def test_skill_declares_long_tool_call_auto_initialization_contract(self) -> None:
+        skill = (PLUGIN_ROOT / "skills" / "context-canvas-checkpoint" / "SKILL.md").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("more than five minutes", skill)
+        self.assertIn("regardless of domain or task type", skill)
+        self.assertRegex(skill, r"create a\s+Canvas automatically")
+        self.assertRegex(skill, r"hooks never predict duration or\s+create a Canvas")
+        self.assertIn("manual approval of newly installed hooks", skill)
+        self.assertIn("inspect `/hooks`", skill)
 
     def test_user_hook_installer_preserves_peers_checks_drift_and_uninstalls_exactly(self) -> None:
         codex_home = self.base / "codex-home"

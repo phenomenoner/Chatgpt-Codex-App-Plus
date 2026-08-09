@@ -1,7 +1,7 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.4.0",
-  "description": "Continuable task maps plus policy-sanitized historical tool snapshots for Codex App and CLI.",
+  "version": "0.4.0+codex.20260809075929",
+  "description": "Continuable task maps with long-tool-call initialization and policy-sanitized historical snapshots for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"
   },
@@ -20,8 +20,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Context Canvas Codex",
-    "shortDescription": "Continue task maps and archive historical tool snapshots.",
-    "longDescription": "Keeps session provenance separate from a continuable semantic task lineage and a local PostToolUse snapshot store. Task maps reopen without destructive mismatch errors, explicit continuation preserves a hash-bound predecessor, and recent canvases plus filtered snapshot history remain discoverable. Snapshots use explicit textual-redaction and opaque-media policies, content addressing, deduplication, bounded retention, and explicit export.",
+    "shortDescription": "Checkpoint long calls, continue maps, and archive snapshots.",
+    "longDescription": "Keeps session provenance separate from a continuable semantic task lineage and a local PostToolUse snapshot store. The bundled skill initializes a Canvas before any tool call reasonably expected to exceed five minutes, regardless of task type, while hooks remain identity-only. Task maps reopen without destructive mismatch errors, explicit continuation preserves a hash-bound predecessor, and recent canvases plus filtered snapshot history remain discoverable. Snapshots use explicit textual-redaction and opaque-media policies, content addressing, deduplication, bounded retention, and explicit export.",
     "developerName": "phenomenoner",
     "category": "Productivity",
     "capabilities": [
@@ -29,7 +29,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Create or restore the task map for this work, including active blockers after compaction.",
+      "Create or restore the task map for this work, including automatic initialization before a tool call expected to exceed five minutes.",
+      "If Context Canvas hook identity is missing, check and manually approve its first-install definitions in /hooks before reinstalling or rebooting.",
       "List my recent task canvases and continue the relevant lineage here.",
       "Search this task map or historical tool snapshots and prepare a closeout or policy-sanitized export."
     ]

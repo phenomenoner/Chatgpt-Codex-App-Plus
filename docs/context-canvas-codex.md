@@ -15,6 +15,7 @@ The design was compared with [`phenomenoner/hermes-agent-harness-plus`](https://
 | Concern | Hermes Context Canvas | Codex adaptation |
 |---|---|---|
 | Task identity | Harness-owned session identity | SHA-256 of trusted `SessionStart.session_id` or `UserPromptSubmit.session_id`; workspace paths are metadata only |
+| Agent initialization policy | Harness lifecycle policy | The bundled skill initializes at the first useful boundary whenever one tool call is reasonably expected to exceed five minutes, regardless of task type; hooks supply identity but never predict duration or create the Canvas |
 | Semantic state | Canonical state/events/projections | Canonical Canvas JSON v3 with objective state, lineage, canonical predecessor digest, summary, Mermaid, bounded search, and Markdown closeout |
 | Factual integrity | Factual nodes point to evidence | Terminal factual states require pointer plus SHA-256; a snapshot URI, object, and every transitive blob are verified before pin and node commit |
 | Updates | Add and mutate task facts | Idempotent upsert, explicit status transition, bounded dependency edges, cycle rejection |
@@ -37,6 +38,7 @@ flowchart LR
     SA --> CAS["SHA-256 JSON/blob store"]
     APP["Codex App"] --> MCP["local stdio MCP"]
     CLI["Codex CLI"] --> MCP
+    AG["agent predicts a tool call over five minutes"] -->|"canvas_start"| MCP
     MCP --> MAP["semantic Canvas"]
     MCP --> LINEAGE["explicit list / continue"]
     LINEAGE --> MAP
@@ -146,7 +148,7 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py in
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-Review `SessionStart`, `UserPromptSubmit`, and `PostToolUse` with `/hooks`. On builds that reload trusted hook configuration, the next prompt in an existing task can demonstrate turn-hook pickup by supplying its current opaque ID; this is useful recovery evidence, not a universal hot-reload guarantee. Then open another fresh task, require a new `SessionStart` ID, perform one harmless supported tool call, and require a new `_snapshots/events` manifest plus an explicit CLI export/readback. This proves only those observed paths, not every tool family or dispatch/handler failure path. Re-run `install` after plugin upgrades so stable user-hook bytes match the plugin. Legacy migration requires exact recorded ownership digests; a retry recovers an interrupted script-first install only when the bytes exactly match. Uninstall removes only exact managed groups and recoverably retires owned files.
+Review `SessionStart`, `UserPromptSubmit`, and `PostToolUse` with `/hooks`. Current Codex App builds require manual approval after first installation; if the opaque ID or turn binding is missing, check the Context Canvas approval/trust state there before reinstalling or rebooting. On builds that reload trusted hook configuration, the next prompt in an existing task can demonstrate turn-hook pickup by supplying its current opaque ID; this is useful recovery evidence, not a universal hot-reload guarantee. Then open another fresh task, require a new `SessionStart` ID, perform one harmless supported tool call, and require a new `_snapshots/events` manifest plus an explicit CLI export/readback. This proves only those observed paths, not every tool family or dispatch/handler failure path. Re-run `install` after plugin upgrades so stable user-hook bytes match the plugin. Legacy migration requires exact recorded ownership digests; a retry recovers an interrupted script-first install only when the bytes exactly match. Uninstall removes only exact managed groups and recoverably retires owned files.
 
 ## Reproduce verification and performance
 

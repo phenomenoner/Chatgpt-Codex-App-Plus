@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 1623,
+      "bytes": 2036,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/.codex-plugin/plugin.json",
-      "sha256": "8e783677e34aeb06f612682fe03bf0a3390f058eadbada495ea0c42d6eb22f33"
+      "sha256": "4fcd6f4a03eb1445011c4d9f315fba0d90bd4d16fa327e30924669f13c592446"
     },
     {
       "bytes": 226,
@@ -25,10 +25,10 @@
       "sha256": "14fc5530a71e04722a9e72a9177723fe0443eb3f639f60d36d87cd4a2d4e8ab3"
     },
     {
-      "bytes": 12922,
+      "bytes": 14604,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/README.md",
-      "sha256": "b88be6bb61e4864793e7fdf4a146d0161780ee1e971b4f5b0c8064ffaa3391c2"
+      "sha256": "6b69a5e9602c60003c3a99d1d968a5fc6a86abb128b694a4c6e24fed814d70f5"
     },
     {
       "bytes": 9052,
@@ -73,22 +73,22 @@
       "sha256": "9722df9461da087807f3ca0b81ec7b206096009330cec8b5c1733273cd4e549b"
     },
     {
-      "bytes": 114295,
+      "bytes": 115557,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/test_context_canvas.py",
-      "sha256": "fb2495a05875dbca319a1717d1b4c6875e0051a1eb7abf7c6e0334509ca7893f"
+      "sha256": "39c07f335780c3a97f05846f2526888af94e35e6e7d4218d5fd8cc37df0e2f94"
     },
     {
-      "bytes": 8618,
+      "bytes": 9506,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/SKILL.md",
-      "sha256": "3d738041c0fb4e877a5891edb48e7f9f99fb01a030b430867c6a3066c543f09d"
+      "sha256": "28b1ef8983446a1de9d9acde280cfb550304c90df9267ac89f82fd9ce4636603"
     },
     {
-      "bytes": 222,
+      "bytes": 429,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/agents/openai.yaml",
-      "sha256": "cc690e774e5fba0f2947d6279342143116bfac5cd7f6b1927c206fc1ee7d4926"
+      "sha256": "9ed874c518260785d0e8425aeaacd05636509e8473b3ee21d6e02be09d263568"
     },
     {
       "bytes": 14526,

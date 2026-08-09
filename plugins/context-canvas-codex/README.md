@@ -1,6 +1,6 @@
 # Context Canvas Codex
 
-Context Canvas Codex 0.4 keeps three deliberately separate concerns for long Codex App and CLI work:
+Context Canvas Codex 0.4 keeps three deliberately separate concerns for Codex App and CLI work that needs durable coordination or is expected to contain a long-running tool call:
 
 - hook-derived execution identity for the current Codex session;
 - a bounded, explicitly continuable semantic task lineage for goals, blockers, decisions, dependencies, findings, and verification pointers;
@@ -15,6 +15,7 @@ The adapter follows the factual-node to evidence-ref invariant from [`phenomenon
 | Capability | Codex adaptation |
 |---|---|
 | Bind, discover, and continue a task canvas | Opaque canvas identity comes only from trusted `SessionStart` or `UserPromptSubmit` input. `canvas_list` discovers recent semantic maps; explicit `canvas_continue` copies one active map into the current ID with stable lineage and a canonical predecessor digest. |
+| Initialize before a long tool call | The bundled skill directs the agent to call `canvas_start` at the first useful boundary whenever one tool call is reasonably expected to exceed five minutes, regardless of domain or task type. Hooks only supply trusted identity; they never predict duration or create a Canvas. |
 | Non-destructive reopen | Repeating `canvas_start` never overwrites an existing ID. A rephrased goal, cwd, or title returns reviewable conflicts instead of a blocking security error. |
 | Objective versus blocker state | The durable objective is `active`, `completed`, or `abandoned`. Open problems are blocker nodes; a goal cannot be marked `blocked`. Legacy blocked goals restore as active objectives. |
 | Evidence-backed semantic nodes | Terminal factual nodes require pointer plus SHA-256 evidence. A `snapshot://sha256/<digest>` pointer is verified and durably pinned before the node commit. |
@@ -49,13 +50,32 @@ _snapshots/
   gc/current.json
 ```
 
-The lifecycle hooks hash the exact Codex `session_id` with SHA-256. A workspace path is metadata only and never determines identity. Startup or clear reports the opaque ID without creating a Canvas; resume or compact injects at most 4,800 UTF-8 bytes of bounded semantic state. `UserPromptSubmit` adds a sub-1,000-byte current-turn binding, so a running task can recover its ID on a later prompt after hook activation instead of depending forever on its first `SessionStart`. Snapshot bodies never enter either injection.
+The lifecycle hooks hash the exact Codex `session_id` with SHA-256. A workspace path is metadata only and never determines identity. Startup or clear reports the opaque ID without creating a Canvas; the agent applies the skill's five-minute prediction rule and initializes through `canvas_start` at the first useful boundary. Resume or compact injects at most 4,800 UTF-8 bytes of bounded semantic state. `UserPromptSubmit` adds a sub-1,000-byte current-turn binding, so a running task can recover its ID on a later prompt after hook activation instead of depending forever on its first `SessionStart`. Snapshot bodies never enter either injection.
 
 Schema v3 gives each initial Canvas a stable lineage ID. `canvas_continue` requires both the current hook-provided ID and an explicit predecessor ID, copies only the bounded semantic map, leaves the predecessor unchanged, and records the SHA-256 of the canonical predecessor state. `canvas_list` derives predecessor/successor navigation without treating an old session as current execution identity.
 
 ## App, MCP, CLI, and snapshots
 
 Once the plugin is enabled, Codex App and CLI can use the bundled MCP tools. For repeated semantic or manifest operations, MCP avoids a fresh Python process. Use the CLI for complete policy-sanitized snapshot export:
+
+Keep one MCP registration authority. The plugin-provided local stdio server is the default; do not
+also retain a user-level `context-canvas` entry, because an absolute cache path can pin an older
+plugin version and duplicate server processes after an upgrade.
+
+For an older Codex build that cannot launch plugin-provided MCP servers, use this explicit-path
+compatibility fallback only while the plugin-provided registration is disabled or unavailable,
+then restart the Codex App:
+
+```powershell
+$python = (Get-Command python -ErrorAction Stop).Source
+$server = (Resolve-Path .\scripts\context_canvas_mcp.py).Path
+codex mcp add context-canvas -- $python -B -I $server
+codex mcp get context-canvas
+```
+
+The final `get` output must show absolute paths for both `command` and the server script. Never
+leave both registrations active. A fresh task must still call a `canvas_*` tool successfully;
+configuration readback alone is not runtime proof.
 
 ```powershell
 python -I scripts/context_canvas.py snapshot-list --canvas-id <opaque-id> --limit 20
@@ -120,6 +140,6 @@ See [SECURITY.md](SECURITY.md) and [docs/SNAPSHOT_STORE_DESIGN.md](docs/SNAPSHOT
 
 ## Activation and retirement
 
-Installation and catalog state do not prove a running task loaded the hooks. After reviewing the changed definitions with `/hooks`, a later prompt in an already-running task may prove `UserPromptSubmit` pickup by supplying its current opaque ID. A fresh task is still the stronger end-to-end check: require a new opaque ID from `SessionStart`, then a new manifest after a harmless tool call. Treat any current-task pickup as runtime evidence, not a guarantee that every Codex build hot-reloads hook configuration.
+Installation and catalog state do not prove a running task loaded the hooks. Current Codex App builds require manual approval of newly installed hook definitions, so if the opaque ID or turn binding is missing, open `/hooks` and check the Context Canvas approval/trust state before reinstalling the hook or restarting the computer. After approval, a later prompt in an already-running task may prove `UserPromptSubmit` pickup by supplying its current opaque ID. A fresh task is still the stronger end-to-end check: require a new opaque ID from `SessionStart`, then a new manifest after a harmless tool call. Treat any current-task pickup as runtime evidence, not a guarantee that every Codex build hot-reloads hook configuration.
 
 For retirement, run `python -I scripts/install_context_canvas_hook.py uninstall` to remove only the exact managed user-hook groups and recoverably retire owned files. Disable the MCP server and skill before archiving the plugin and its data root. Do not delete repository WALs, receipts, pinned snapshot exports, or evidence targets referenced by Canvas nodes.
