@@ -1,6 +1,6 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.4.0+codex.20260809075929",
+  "version": "0.4.0+codex.20260809100430",
   "description": "Continuable task maps with long-tool-call initialization and policy-sanitized historical snapshots for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"
@@ -30,7 +30,6 @@
     ],
     "defaultPrompt": [
       "Create or restore the task map for this work, including automatic initialization before a tool call expected to exceed five minutes.",
-      "If Context Canvas hook identity is missing, check and manually approve its first-install definitions in /hooks before reinstalling or rebooting.",
       "List my recent task canvases and continue the relevant lineage here.",
       "Search this task map or historical tool snapshots and prepare a closeout or policy-sanitized export."
     ]

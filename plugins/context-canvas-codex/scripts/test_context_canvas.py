@@ -644,9 +644,20 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertEqual(server["cwd"], ".")
         manifest = json.loads((PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
-        self.assertIn("exceed five minutes", manifest["interface"]["defaultPrompt"][0])
-        self.assertIn("manually approve", manifest["interface"]["defaultPrompt"][1])
-        self.assertIn("/hooks", manifest["interface"]["defaultPrompt"][1])
+        default_prompts = manifest["interface"]["defaultPrompt"]
+        self.assertEqual(len(default_prompts), 3)
+        self.assertIn("exceed five minutes", default_prompts[0])
+        self.assertIn("continue", default_prompts[1])
+        self.assertIn("snapshots", default_prompts[2])
+        agent_config = (
+            PLUGIN_ROOT
+            / "skills"
+            / "context-canvas-checkpoint"
+            / "agents"
+            / "openai.yaml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("manual approval", agent_config)
+        self.assertIn("/hooks", agent_config)
         self.assertFalse((PLUGIN_ROOT / ".app.json").exists())
         self.assertFalse((PLUGIN_ROOT / "assets").exists())
         readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
