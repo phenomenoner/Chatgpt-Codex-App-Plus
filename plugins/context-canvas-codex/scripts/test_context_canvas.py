@@ -2230,6 +2230,35 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         self.assertEqual(search["hits"], [])
         self.assertEqual(search["skipped_count"], 0)
 
+    def test_invalid_semantic_mutation_does_not_disable_independent_snapshot_capture(self) -> None:
+        store = canvas.CanvasStore(root=self.root)
+        store.initialize(self.canvas_id, goal="Keep independent history available")
+
+        with self.assertRaisesRegex(canvas.CanvasError, "evidence"):
+            store.add_node(
+                self.canvas_id,
+                kind="decision",
+                status_value="done",
+                summary="This invalid terminal mutation must not be committed",
+            )
+
+        checkpoint = store.add_node(
+            self.canvas_id,
+            kind="plan",
+            status_value="planned",
+            summary="A later valid checkpoint remains allowed",
+        )
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(tool_use_id="call-after-invalid-mutation")
+        )
+
+        self.assertEqual(checkpoint["node_id"], "N000002")
+        self.assertEqual(captured["capture_status"], "stored")
+        listed = self.snapshots.list_events(canvas_id=self.canvas_id)
+        self.assertEqual(
+            [event["event_id"] for event in listed["events"]], [captured["event_id"]]
+        )
+
     def test_snapshot_promotion_rejects_missing_transitive_blob(self) -> None:
         binary = b"promotion-blob"
         data_url = "data:application/octet-stream;base64," + base64.b64encode(binary).decode(

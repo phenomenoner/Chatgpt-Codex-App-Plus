@@ -55,4 +55,13 @@ Sensitive-looking semantic node content still fails closed before mutation. That
 - Search is bounded substring lookup over semantic metadata, not semantic recall and not snapshot body search.
 - `python` must resolve to Python 3.11 or newer for the bundled commands.
 
-If an ACL, alias, lock, schema, digest, validation, protocol, or corruption check fails, preserve the directory for inspection and disable the plugin. Do not retry through a less restrictive path.
+An invalid caller-supplied semantic-node mutation fails closed for that mutation
+only. It does not prove the stored Canvas is corrupt, does not disable or abandon
+the Canvas, and does not disable the separately guarded `PostToolUse` snapshot
+capture path. Correct the mutation and make a later valid checkpoint instead.
+
+If an ACL, alias, lock, stored schema or digest, protocol, or corruption check
+fails at a storage boundary, preserve the directory for inspection and disable
+the affected plugin surface. Do not retry through a less restrictive path or
+identity. A snapshot capture whose own sanitization or storage checks fail emits
+no archive and fails open only with respect to the original tool result.
