@@ -1,4 +1,0 @@
-interface:
-  display_name: "Codex CLI Luna Worker"
-  short_description: "Run bounded Luna implementation workers via Codex CLI"
-  default_prompt: "Use $codex-cli-luna-worker to run a bounded Luna/max implementation worker with exclusive file ownership."

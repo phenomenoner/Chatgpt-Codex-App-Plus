@@ -1,10 +1,10 @@
 # About ChatGPT Codex App Plus
 
-Codex App Plus is a public-safe power kit for developers who want evidence-backed long-task context, stronger review closure, cheaper long-running supervision, bounded multi-agent work, and reproducible Codex customization without publishing private runtime state.
+Codex App Plus is a public-safe distribution for developers who want local long-task context, an optional A2A operations skill, and reproducible Codex customization without publishing private runtime state. General engineering workflows now have a separate canonical home in the Smart Agentic Engineering Toolkit.
 
 Repository description:
 
-> Public-safe Codex power kit: local Context Canvas, complete review gates, long-run supervision, bounded workers, and fail-closed synchronization.
+> Public-safe Codex bundle: local Context Canvas, A2A operations, pinned toolkit links, and fail-closed synchronization.
 
 Suggested GitHub topics:
 

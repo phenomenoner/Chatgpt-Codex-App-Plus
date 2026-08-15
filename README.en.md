@@ -14,18 +14,17 @@
 
 The best Codex workflows rarely live in one file. They emerge across durable instructions, focused skills, PowerShell helpers, and safety contracts. Codex App Plus packages the reusable parts into one curated outer layer:
 
-- Review proportionally: ordinary reviews return a complete finding batch; explicit independent or release gates can add fixed-point, hash-bound closure.
+- Keep engineering workflows canonical: review, supervision, verification, and incident skills live in one dedicated toolkit instead of a second vendored copy.
 - Preserve long-task shape and evidence: keep a semantic task map separate from historical tool snapshots governed by an explicit sanitization policy across resume, compaction, and later investigation.
-- Supervise long runs cheaply: move heartbeat, stall detection, and terminal wakeups outside expensive reasoning turns.
 - Delegate with brakes: require a real independence and ownership case before spawning workers.
 - Reproduce the useful parts: ship safe configuration examples and installable skills without copying runtime state.
 - Sync without leaks: export only explicit allow-listed files and fail closed on secrets, private paths, unknown files, or hash drift.
 
 ## Included components
 
-The bundle includes the `context-canvas-codex` plugin plus seven original skills and tools. Context Canvas keeps hook-derived session identity separate from a continuable semantic task lineage, while content-addressed, deduplicated, TTL/pin-managed historical tool snapshots remain separately searchable after sanitization. It provides per-prompt identity recovery, explicit lineage, dependency-aware nodes, bounded search and closeout, and a persistent stdio MCP surface shared by Codex App and CLI. The other components cover proportional batch-complete review, long-run supervision, a bounded Luna CLI worker, evidence-driven completeness synthesis, incident-to-regression packaging, an explicit Claude review adapter, and A2A Superhub operation.
+The bundle includes the `context-canvas-codex` plugin and the optional `operate-a2a-superhub` skill. Context Canvas keeps hook-derived session identity separate from a continuable semantic task lineage, while content-addressed, deduplicated, TTL/pin-managed historical tool snapshots remain separately searchable after sanitization. It provides per-prompt identity recovery, explicit lineage, dependency-aware nodes, bounded search and closeout, and a persistent stdio MCP surface shared by Codex App and CLI.
 
-Components that already have a canonical public home stay as versioned pointers instead of copied forks. Codex users are pointed directly to the [Codex-specialized Baton branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing), while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
+Components that already have a canonical public home stay as versioned pointers instead of copied forks. General planning, specification, review, testing, delegation, recovery, and release workflows now live in the [Smart Agentic Engineering Toolkit](https://github.com/phenomenoner/smart-agentic-engineering-toolkit). Codex users are also pointed directly to the [Codex-specialized Baton branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing), while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
 
 The [Context Canvas technical note](docs/context-canvas-codex.md) records the Hermes comparison, Codex-specific boundaries, schema, and reproducible latency probe.
 
@@ -35,7 +34,14 @@ The [Context Canvas technical note](docs/context-canvas-codex.md) records the He
 git clone https://github.com/phenomenoner/Chatgpt-Codex-App-Plus.git
 Set-Location Chatgpt-Codex-App-Plus
 python scripts/public_sync.py validate
-pwsh -File scripts/install.ps1 -WhatIf
+```
+
+Install the canonical Smart Agentic Engineering Toolkit:
+
+```powershell
+codex plugin marketplace add phenomenoner/smart-agentic-engineering-toolkit --ref v0.1.0
+codex plugin add smart-agentic-engineering-toolkit@smart-agentic-engineering-toolkit
+codex plugin list
 ```
 
 Install the Context Canvas plugin from this repository marketplace:
@@ -68,16 +74,17 @@ compatibility layer; it preserves peer hooks and a hash-addressed backup.
 Installation, catalog discovery, or a tool event marked only `started` is not
 runtime proof.
 
-Install the recommended set after reviewing the preview:
+This repository no longer copies the general-engineering skills. To install the
+optional vendored `operate-a2a-superhub` skill, preview the exact operation:
 
 ```powershell
-pwsh -File scripts/install.ps1
+pwsh -File scripts/install.ps1 -Skill operate-a2a-superhub -WhatIf
 ```
 
-Or select individual skills:
+Then install it:
 
 ```powershell
-pwsh -File scripts/install.ps1 -Skill long-run-supervisor,batch-complete-independent-review
+pwsh -File scripts/install.ps1 -Skill operate-a2a-superhub
 ```
 
 Codex discovers user and repository skills from `.agents/skills` locations, while plugins can bundle skills, MCP servers, and lifecycle hooks. See OpenAI's official [Build skills](https://learn.chatgpt.com/docs/build-skills), [Package plugins](https://developers.openai.com/plugins/build/plugins), [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), and [Config basics](https://learn.chatgpt.com/docs/config-file/config-basic) guides before installing durable global behavior.
@@ -102,7 +109,7 @@ needs an explicit, reviewed plugin-scoped MCP approval policy plus completed
 tool receipts and canonical JSON readback. See the
 [technical note](docs/context-canvas-codex.md).
 
-The repository now contains directly installable skills and tools plus one marketplace-ready community plugin. It is not an official OpenAI plugin; the repository marketplace makes source, version, and installation paths inspectable and reproducible.
+The repository now contains one marketplace-ready Context Canvas community plugin, an optional A2A skill, and versioned pointers to the canonical engineering toolkit. It is not an official OpenAI plugin; the repository marketplace makes source, version, and installation paths inspectable and reproducible.
 
 ## License
 

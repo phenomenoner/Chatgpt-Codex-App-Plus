@@ -1,7 +1,0 @@
-interface:
-  display_name: "Batch-Complete Review"
-  short_description: "Review full finding batches at proportional rigor"
-  default_prompt: "Use $batch-complete-independent-review to review this change, choosing ordinary finding mode or a formal independent gate from the requested decision."
-
-policy:
-  allow_implicit_invocation: true

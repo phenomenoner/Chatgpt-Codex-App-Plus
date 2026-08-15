@@ -1,4 +1,0 @@
-interface:
-  display_name: "Incident to Regression"
-  short_description: "Convert incidents into replayable regression gates"
-  default_prompt: "Use $incident-to-regression to turn this incident into a redacted fail-first regression package."

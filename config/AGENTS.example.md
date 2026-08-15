@@ -1,5 +1,9 @@
 # Global Codex Working Agreements
 
+> The general-engineering skills referenced below are maintained in the
+> [Smart Agentic Engineering Toolkit](https://github.com/phenomenoner/smart-agentic-engineering-toolkit).
+> This repository links to that canonical source instead of vendoring another copy.
+
 ## Smallest reliable workflow
 
 - Use the smallest workflow that can reliably establish the requested outcome. Plans, tests, skills, and reviewer loops are tools, not proof of quality by themselves.

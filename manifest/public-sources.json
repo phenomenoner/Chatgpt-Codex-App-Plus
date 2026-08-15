@@ -11,70 +11,12 @@
       "exclude": ["**/__pycache__/**", "**/*.pyc"]
     },
     {
-      "id": "batch-complete-independent-review",
-      "mode": "vendor",
-      "sourceRoot": "codex",
-      "source": "skills/batch-complete-independent-review",
-      "destination": "skills/batch-complete-independent-review",
-      "include": ["*", "**/*"],
-      "exclude": ["**/__pycache__/**", "**/*.pyc"]
-    },
-    {
-      "id": "claude-independent-review",
-      "mode": "vendor",
-      "sourceRoot": "codex",
-      "source": "skills/claude-independent-review",
-      "destination": "skills/claude-independent-review",
-      "include": ["*", "**/*"],
-      "exclude": ["**/__pycache__/**", "**/*.pyc"]
-    },
-    {
-      "id": "codex-cli-luna-worker",
-      "mode": "vendor",
-      "sourceRoot": "codex",
-      "source": "skills/codex-cli-luna-worker",
-      "destination": "skills/codex-cli-luna-worker",
-      "include": ["*", "**/*"],
-      "exclude": ["**/__pycache__/**", "**/*.pyc"],
-      "publicExceptions": [
-        {
-          "path": "SKILL.md",
-          "finding": "project-specific runtime marker",
-          "reason": "The public skill documents an explicit deny boundary for a protected runtime directory."
-        },
-        {
-          "path": "scripts/invoke_luna_worker.ps1",
-          "finding": "project-specific runtime marker",
-          "reason": "The worker enforces the documented protected-runtime deny boundary in code."
-        }
-      ]
-    },
-    {
-      "id": "completeness-and-test-synthesis",
-      "mode": "vendor",
-      "sourceRoot": "codex",
-      "source": "skills/completeness-and-test-synthesis",
-      "destination": "skills/completeness-and-test-synthesis",
-      "include": ["*", "**/*"],
-      "exclude": ["**/__pycache__/**", "**/*.pyc"]
-    },
-    {
-      "id": "incident-to-regression",
-      "mode": "vendor",
-      "sourceRoot": "codex",
-      "source": "skills/incident-to-regression",
-      "destination": "skills/incident-to-regression",
-      "include": ["*", "**/*"],
-      "exclude": ["**/__pycache__/**", "**/*.pyc"]
-    },
-    {
-      "id": "long-run-supervisor",
-      "mode": "vendor",
-      "sourceRoot": "codex",
-      "source": "skills/long-run-supervisor",
-      "destination": "skills/long-run-supervisor",
-      "include": ["*", "**/*"],
-      "exclude": ["**/__pycache__/**", "**/*.pyc"]
+      "id": "smart-agentic-engineering-toolkit",
+      "mode": "pointer",
+      "canonicalUrl": "https://github.com/phenomenoner/smart-agentic-engineering-toolkit",
+      "version": "0.1.0",
+      "commit": "425dcbe248b7fbb0fc536eae145ccea23dc5a1e3",
+      "license": "MIT"
     },
     {
       "id": "operate-a2a-superhub",

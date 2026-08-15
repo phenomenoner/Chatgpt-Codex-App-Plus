@@ -12,16 +12,11 @@ $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $sourceRoot = [System.IO.Path]::GetFullPath((Join-Path $repositoryRoot 'skills'))
 $destinationFull = [System.IO.Path]::GetFullPath($DestinationRoot)
 
-$recommended = @(
-    'batch-complete-independent-review',
-    'codex-cli-luna-worker',
-    'completeness-and-test-synthesis',
-    'incident-to-regression',
-    'long-run-supervisor'
-)
-
 if ($Skill.Count -eq 0) {
-    $Skill = $recommended
+    Write-Host 'No vendored skill selected.'
+    Write-Host 'Install the canonical engineering suite from https://github.com/phenomenoner/smart-agentic-engineering-toolkit.'
+    Write-Host 'Use -Skill operate-a2a-superhub to install this repository''s optional vendored A2A skill.'
+    return
 }
 
 $available = @{}

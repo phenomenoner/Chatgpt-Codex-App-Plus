@@ -26,14 +26,5 @@ jobs:
       - name: Run Context Canvas plugin regressions
         working-directory: plugins/context-canvas-codex
         run: python -W error::ResourceWarning -I scripts/test_context_canvas.py
-      - name: Run review gate contract tests
-        working-directory: skills/batch-complete-independent-review
-        run: python -m unittest discover -s tests -v
-      - name: Run supervisor PowerShell regressions
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          ./skills/long-run-supervisor/tests/atomic-write-regression.ps1
-          ./skills/long-run-supervisor/tests/smoke.ps1
       - name: Validate public hygiene and lock
         run: python scripts/public_sync.py validate

@@ -14,52 +14,15 @@
       "summary": "Keep hook-derived session identity separate from a continuable semantic task lineage and complete policy-sanitized, content-addressed historical tool snapshots with filtered lookup, dedupe, TTL, pinning, bounded MCP metadata, and explicit CLI export."
     },
     {
-      "id": "batch-complete-independent-review",
-      "distribution": "vendored",
+      "id": "smart-agentic-engineering-toolkit",
+      "distribution": "pointer",
       "defaultInstall": true,
       "maturity": "beta",
-      "requires": ["Python 3.11+ for deterministic validation"],
-      "summary": "Continue ordinary reviews through the full finding batch, and reserve fixed-point, counterfactual, hash-bound verdicts for explicit independent or release gates."
-    },
-    {
-      "id": "long-run-supervisor",
-      "distribution": "vendored",
-      "defaultInstall": true,
-      "maturity": "beta",
-      "requires": ["PowerShell 7+ recommended"],
-      "summary": "Move heartbeat, stall detection, and terminal wakeups outside high-context reasoning turns."
-    },
-    {
-      "id": "codex-cli-luna-worker",
-      "distribution": "vendored",
-      "defaultInstall": true,
-      "maturity": "experimental",
-      "requires": ["Codex CLI", "PowerShell"],
-      "summary": "Ask a bounded, read-only Luna CLI worker for an apply_patch proposal when native collaboration does not expose Luna."
-    },
-    {
-      "id": "completeness-and-test-synthesis",
-      "distribution": "vendored",
-      "defaultInstall": true,
-      "maturity": "beta",
-      "requires": [],
-      "summary": "Choose the lowest test altitude that can falsify a readiness claim and synthesize missing regression evidence without making every change a formal gate."
-    },
-    {
-      "id": "incident-to-regression",
-      "distribution": "vendored",
-      "defaultInstall": true,
-      "maturity": "beta",
-      "requires": ["Python 3.11+ for record validation"],
-      "summary": "Turn engineering incidents into redacted fail-first replay fixtures and rollout gates."
-    },
-    {
-      "id": "claude-independent-review",
-      "distribution": "vendored",
-      "defaultInstall": false,
-      "maturity": "experimental",
-      "requires": ["Claude Code CLI", "Explicit user authorization per invocation"],
-      "summary": "Run a local Claude CLI as an independent, read-only, hash-bound review adapter."
+      "requires": [
+        "Codex plugin support or a compatible Agent Skills host"
+      ],
+      "canonicalUrl": "https://github.com/phenomenoner/smart-agentic-engineering-toolkit",
+      "summary": "Canonical 16-skill engineering suite for evidence-calibrated planning, implementation, review, testing, delegation, recovery, and release work, with first-principles mechanism checks at planning boundaries."
     },
     {
       "id": "operate-a2a-superhub",

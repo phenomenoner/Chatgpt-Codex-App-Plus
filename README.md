@@ -20,9 +20,8 @@
 
 Codex 很強，但真正順手的工作環境通常散落在個人設定、skills、PowerShell 工具與長期累積的操作規則裡。這個 repo 把其中可公開、可重用的部分整理成一套「Plus」層：
 
-- 一次找齊：reviewer 發現第一個 blocker 後不停止，持續做到 coverage closure。
+- 工程技能不分叉：review、長跑監督、驗證與 incident workflows 統一指向獨立的 canonical toolkit，不再維護第二份副本。
 - 長任務接得回來：Context Canvas 把當前 session 身分、可明示延續的 semantic task lineage，以及依 sanitization policy 保存的歷史 tool snapshots 分開；重開時不再因 goal 換個說法就把工作卡死。
-- 長跑省回合：本機 supervisor 負責 heartbeat、停滯判定與終態喚醒，減少高脈絡輪詢。
 - 分工有煞車：需要 subagent 時先做成本、獨立性與寫入所有權判斷。
 - 設定可重現：提供安全預設、全域 `AGENTS.md` 範例與可選安裝器。
 - 同步不洩密：只有 manifest allow-list 內的檔案能進 repo；任何憑證、私有路徑或未知檔案都會 fail closed。
@@ -32,12 +31,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 | Component | 解決什麼問題 | 發佈方式 |
 |---|---|---|
 | `context-canvas-codex` | 本機 semantic task lineage、跨 session 明示延續、最近任務／snapshot 篩選查找、hash-bound evidence，以及 content-addressed、deduplicated、TTL/pin 管理的 sanitized tool snapshots | 內含 plugin、選配 |
-| `batch-complete-independent-review` | ordinary review 一次找完整 finding batch；明示獨立／release gate 才啟用 fixed-point 與 hash-bound verdict | 內含 |
-| `long-run-supervisor` | 長時間命令的低成本監督與 wake-only 回報 | 內含 |
-| `codex-cli-luna-worker` | 在原生協作介面沒有 Luna 時，以唯讀 patch worker 補位 | 內含 |
-| `completeness-and-test-synthesis` | 依實際 failure seam 選最低可否證的測試高度，處理 readiness 與「測試綠了但實際仍壞」 | 內含 |
-| `incident-to-regression` | 把事故轉成可重播、可驗證的 regression package | 內含 |
-| `claude-independent-review` | 明示授權後，以 Claude CLI 做獨立、hash-bound review | 內含、選配 |
+| `smart-agentic-engineering-toolkit` | 16 個工程 skills，涵蓋 first-principles planning、specification、review、測試、delegation、recovery 與 release evidence | [canonical repo，版本鎖定 pointer](https://github.com/phenomenoner/smart-agentic-engineering-toolkit) |
 | `operate-a2a-superhub` | A2A Superhub 的 bounded operation 與診斷流程 | 內含、選配 |
 | `baton-fanout-skill` | Codex subagent dispatch brake、Luna/max bounded codegen route 與相對 working lane 的 review floor | [Codex 專用 branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing) |
 | Understand Anything | codebase knowledge graph 與理解工具 | [上游 pointer](https://github.com/Egonex-AI/Understand-Anything) |
@@ -53,6 +47,14 @@ Context Canvas 的 Hermes 對照、Codex 適配、安全邊界與可重跑效能
 git clone https://github.com/phenomenoner/Chatgpt-Codex-App-Plus.git
 Set-Location Chatgpt-Codex-App-Plus
 python scripts/public_sync.py validate
+```
+
+安裝 canonical Smart Agentic Engineering Toolkit：
+
+```powershell
+codex plugin marketplace add phenomenoner/smart-agentic-engineering-toolkit --ref v0.1.0
+codex plugin add smart-agentic-engineering-toolkit@smart-agentic-engineering-toolkit
+codex plugin list
 ```
 
 安裝 Context Canvas plugin：
@@ -80,17 +82,17 @@ plugin MCP/skill 會載入、plugin-bundled hook 卻未執行；這個顯式 ins
 就是相容層，並會保留既有 hooks 與 hash-addressed backup。安裝、catalog
 discovery 或 tool call 顯示 `started` 都不等於實際執行完成。
 
-先預覽推薦 skills 的安裝位置與動作：
+本 repo 不再複製 general-engineering skills。若要安裝仍由這裡維護的選配
+`operate-a2a-superhub`，先預覽安裝位置與動作：
 
 ```powershell
-pwsh -File scripts/install.ps1 -WhatIf
+pwsh -File scripts/install.ps1 -Skill operate-a2a-superhub -WhatIf
 ```
 
-確認後安裝推薦組合，或只安裝指定 skill：
+確認後安裝：
 
 ```powershell
-pwsh -File scripts/install.ps1
-pwsh -File scripts/install.ps1 -Skill long-run-supervisor,batch-complete-independent-review
+pwsh -File scripts/install.ps1 -Skill operate-a2a-superhub
 ```
 
 Codex 目前會從 user-level `.agents/skills`、repo-level `.agents/skills` 與系統位置載入 skills；如新增 skill 後未立即出現，重啟 Codex。Plugin 則可同時包 skills、MCP server 與 lifecycle hooks。詳見官方 [Build skills](https://learn.chatgpt.com/docs/build-skills) 與 [Package plugins](https://developers.openai.com/plugins/build/plugins)。
@@ -128,7 +130,7 @@ repo 內附 machine-readable benchmark，涵蓋 persistent MCP read、fresh CLI�
 policy，並以 `completed` tool receipt 加 canonical JSON readback 判定；詳見
 [技術說明](docs/context-canvas-codex.md)。
 
-這個 repo 現在同時提供可直接安裝的 skills/tools 與第一個 marketplace-ready community plugin。它不是 OpenAI 官方 plugin；repo marketplace 只是讓來源、版本與安裝路徑可檢查、可重現。
+這個 repo 現在提供可直接安裝的 Context Canvas community plugin、選配 A2A skill，以及指向 canonical engineering toolkit 的版本鎖定 pointer。它不是 OpenAI 官方 plugin；repo marketplace 只是讓來源、版本與安裝路徑可檢查、可重現。
 
 ## License
 

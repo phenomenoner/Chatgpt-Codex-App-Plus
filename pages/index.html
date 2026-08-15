@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#f7f2e9">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23171719'/%3E%3Cpath d='M18 38l12-20 5 10 11-2-14 20-5-10z' fill='%23ef6d54'/%3E%3C/svg%3E">
-  <meta name="description" content="給 Codex App user 的 token 壓力解法：Context Canvas、Baton Fanout、Codex CLI Luna Worker seminar page。">
+  <meta name="description" content="給 Codex App user 的 token 壓力解法：Context Canvas、Baton Fanout，以及 canonical Smart Agentic Engineering Toolkit。">
   <title>Token 不要浪費在繞路上｜Codex App Plus Seminar</title>
   <style>
     :root {
@@ -1009,12 +1009,12 @@
             <div class="tool-outcome">少做無效分工</div>
           </article>
           <article class="tool-card luna">
-            <div class="tool-index">03 / BRIDGE</div>
+            <div class="tool-index">03 / TOOLKIT</div>
             <div class="tool-icon">↗</div>
-            <h3>Luna 工班通道</h3>
-            <div class="tool-name">codex-cli-luna-worker</div>
-            <p>當原生協作介面沒有 Luna 時，用唯讀的 Codex CLI worker 產生 bounded patch proposal，再由主 agent review、套用、驗證。</p>
-            <div class="tool-outcome">讓工班真的可用</div>
+            <h3>工程技能正本</h3>
+            <div class="tool-name">smart-agentic-engineering-toolkit</div>
+            <p>把 planning、review、測試、delegation、recovery 與 release evidence 放在單一 canonical repo；這裡只保留版本鎖定 pointer。</p>
+            <div class="tool-outcome">少一份漂移副本</div>
           </article>
         </div>
       </div>
@@ -1090,10 +1090,10 @@
       </div>
     </section>
 
-    <section class="slide" id="slide-6" data-label="Luna Worker">
+    <section class="slide" id="slide-6" data-label="Engineering Toolkit">
       <span class="slide-number">06</span>
       <div class="slide-inner">
-        <div class="kicker">03 / Codex CLI Luna Worker</div>
+        <div class="kicker">03 / Smart Agentic Engineering Toolkit</div>
         <h2 class="section-title">當介面沒有 Luna，<br><span class="mint">就把它接成一座安全的橋。</span></h2>
         <div class="luna-layout">
           <div class="bridge-board" aria-label="Codex CLI Luna Worker 邊界示意圖">
@@ -1107,7 +1107,7 @@
             <div class="bridge-return"><b>Patch proposal 回來了</b><span>→ 還不是完成；完成要等主 agent 重新讀檔、驗證與收斂。</span></div>
           </div>
           <div>
-            <p class="lede" style="margin-top:0;">這個工具不是讓 Luna 越權，也不是把主 agent 的責任外包。它是 Baton 決定「值得派工」之後，提供一條可控的動手通道。</p>
+            <p class="lede" style="margin-top:0;"><code>codex-cli-luna-worker</code> 是 <a href="https://github.com/phenomenoner/smart-agentic-engineering-toolkit" target="_blank" rel="noopener">canonical toolkit</a> 裡的一個具體能力：它不是讓 Luna 越權，也不是把主 agent 的責任外包，而是在 Baton 判定值得派工後提供一條可控的動手通道。</p>
             <div class="luna-steps">
               <div class="luna-step"><div class="num">1</div><div><strong>Read-only workspace</strong><span>worker 只能提出 patch，不直接改 shared workspace，不 commit、不 push。</span></div></div>
               <div class="luna-step"><div class="num">2</div><div><strong>Bounded target paths</strong><span>brief 明確寫出可以碰哪些檔案；超出範圍就停下來回報。</span></div></div>
@@ -1165,7 +1165,7 @@
         <div class="cta-copy">
           <div class="kicker">Your next Codex task</div>
           <h2 class="section-title">想開始？<br><span class="violet">把這句話貼給 Codex。</span></h2>
-          <p class="lede">先安裝三個工具，再回到你的下一個長任務：讓地圖守住脈絡，讓 Baton 決定分工，讓 Luna 在清楚邊界內動手。</p>
+          <p class="lede">依各自 canonical source 安裝，再回到你的下一個長任務：讓地圖守住脈絡、讓 Baton 決定分工，讓 engineering toolkit 提供可驗證的施工與收斂流程。</p>
           <div class="closing-lines">
             <div class="closing-line"><i>01</i><b>Map first</b><span>先知道自己走到哪裡</span></div>
             <div class="closing-line"><i>02</i><b>Fan out with brakes</b><span>只把值得平行的工序拆開</span></div>
@@ -1175,11 +1175,12 @@
         <div>
           <div class="prompt-card">
             <div class="prompt-top"><span>INSTALL PROMPT / COPY THIS</span><button class="copy-button" id="copyPrompt" type="button">複製 prompt</button></div>
-            <pre class="prompt-text" id="installPrompt">我想要安裝 github repo <span class="prompt-url">https://github.com/phenomenoner/Chatgpt-Codex-App-Plus</span> 裡面的 1. context-canvas-codex 2. baton-fanout-skill 3. codex-cli-luna-worker 工具。</pre>
+            <pre class="prompt-text" id="installPrompt">我想依 canonical sources 安裝：1. <span class="prompt-url">https://github.com/phenomenoner/Chatgpt-Codex-App-Plus</span> 的 context-canvas-codex；2. <span class="prompt-url">https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing</span> 的 baton-fanout-skill；3. <span class="prompt-url">https://github.com/phenomenoner/smart-agentic-engineering-toolkit</span> v0.1.0。不要從舊 bundle 複製 toolkit skills。</pre>
           </div>
           <div class="cta-links">
             <a href="https://github.com/phenomenoner/Chatgpt-Codex-App-Plus" target="_blank" rel="noopener">ChatGPT Codex App Plus ↗</a>
-            <a href="https://github.com/phenomenoner/baton-fanout-skill" target="_blank" rel="noopener">Baton Fanout Skill ↗</a>
+            <a href="https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing" target="_blank" rel="noopener">Baton Fanout Skill ↗</a>
+            <a href="https://github.com/phenomenoner/smart-agentic-engineering-toolkit" target="_blank" rel="noopener">Smart Agentic Engineering Toolkit ↗</a>
             <a href="https://phenomenoner.github.io/hermes-agent-harness-plus/context-canvas-story.html" target="_blank" rel="noopener">Context Canvas origin story ↗</a>
           </div>
           <div class="tip-grid" aria-label="給 Codex App user 的兩個小 tips">
@@ -1364,7 +1365,7 @@
         }, reduceMotion ? 1100 : 1700);
       });
 
-      const promptText = '我想要安裝 github repo https://github.com/phenomenoner/Chatgpt-Codex-App-Plus 裡面的 1. context-canvas-codex 2. baton-fanout-skill 3. codex-cli-luna-worker 工具。';
+      const promptText = '我想依 canonical sources 安裝：1. https://github.com/phenomenoner/Chatgpt-Codex-App-Plus 的 context-canvas-codex；2. https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing 的 baton-fanout-skill；3. https://github.com/phenomenoner/smart-agentic-engineering-toolkit v0.1.0。不要從舊 bundle 複製 toolkit skills。';
       const copyButton = document.getElementById('copyPrompt');
       copyButton.addEventListener('click', async () => {
         let copied = false;

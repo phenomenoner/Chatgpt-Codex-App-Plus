@@ -91,174 +91,6 @@
       "sha256": "9ed874c518260785d0e8425aeaacd05636509e8473b3ee21d6e02be09d263568"
     },
     {
-      "bytes": 14526,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/SKILL.md",
-      "sha256": "83c4cae4b2708f2880c18ca1df4202c7d28164e87c92d7b9b88dbedd98ea95cc"
-    },
-    {
-      "bytes": 338,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/agents/openai.yaml",
-      "sha256": "d12533dfe39c4b16e8af451138e22ede5dc05925ade668e91736e056c322aad4"
-    },
-    {
-      "bytes": 1264,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/references/coverage-matrix.schema.json",
-      "sha256": "54483fc5253e1a9b0210bdbfe0a18c7b868080207685d0e535950cf31a4ca5e7"
-    },
-    {
-      "bytes": 7357,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/references/cross-audit.schema.json",
-      "sha256": "9e95e87e65e62ad0b092dfa78927e047a04d094ffa9e804093ee2db79ab7536f"
-    },
-    {
-      "bytes": 11551,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/references/protocol.md",
-      "sha256": "74fd46d8d41041cb81f7a80e70b2015421a44cb53e5e5343accb2f5c31379520"
-    },
-    {
-      "bytes": 10109,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/references/review-report.schema.json",
-      "sha256": "c0f1199c9df4a9479b6be811594982824322aaa9122330014d67239dc0bf98aa"
-    },
-    {
-      "bytes": 1099,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/references/review-wave.schema.json",
-      "sha256": "b72860377cd3d855352db8022718d12b0897f04984fa2d6968e1bcd076c1fa6c"
-    },
-    {
-      "bytes": 4593,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/references/synthesis.schema.json",
-      "sha256": "6bded6d32d5c080687ec5696886e1d25bbd166923e73f2f436abeb9becb64c4b"
-    },
-    {
-      "bytes": 92553,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/scripts/review_gate.py",
-      "sha256": "06d99bdc4303f40a0d5ad5ba65a39c0c428a3fda6295d305d101b9a09d61d5f6"
-    },
-    {
-      "bytes": 33778,
-      "componentId": "batch-complete-independent-review",
-      "path": "skills/batch-complete-independent-review/tests/test_review_gate.py",
-      "sha256": "2b65c23a2cf0256a49ca400ed3089b7e6233d0f3a0983279fb83c47f99164012"
-    },
-    {
-      "bytes": 4010,
-      "componentId": "claude-independent-review",
-      "path": "skills/claude-independent-review/SKILL.md",
-      "sha256": "898fd7a4655bfe4a9c8c2baf7d06d0912daf00b3f85d34e28e8a7d129c119de8"
-    },
-    {
-      "bytes": 241,
-      "componentId": "claude-independent-review",
-      "path": "skills/claude-independent-review/agents/openai.yaml",
-      "sha256": "9f0eef02d9b6765f45acfaa8525f437b5ae77cf59cd18b9654b16a01da9e7979"
-    },
-    {
-      "bytes": 6820,
-      "componentId": "codex-cli-luna-worker",
-      "path": "skills/codex-cli-luna-worker/SKILL.md",
-      "sha256": "a6b4fcde72e578401d3334f426b683bc47b303c678960fb13dd1ae9038a7fe65"
-    },
-    {
-      "bytes": 254,
-      "componentId": "codex-cli-luna-worker",
-      "path": "skills/codex-cli-luna-worker/agents/openai.yaml",
-      "sha256": "65fcaf7c04a7c2a70cb921a8860acae27a48d2463c5b246f172b77658416612c"
-    },
-    {
-      "bytes": 16066,
-      "componentId": "codex-cli-luna-worker",
-      "path": "skills/codex-cli-luna-worker/scripts/invoke_luna_worker.ps1",
-      "sha256": "a274014953d4d32b16cf752f5760a529d0cfa9e8137a531faf26312b631dbb78"
-    },
-    {
-      "bytes": 696,
-      "componentId": "codex-cli-luna-worker",
-      "path": "skills/codex-cli-luna-worker/scripts/worker-output.schema.json",
-      "sha256": "ba975787db36f194f5dd3212112b8f86dac8f11bc8427bd6edd973043541d295"
-    },
-    {
-      "bytes": 2299,
-      "componentId": "completeness-and-test-synthesis",
-      "path": "skills/completeness-and-test-synthesis/README.md",
-      "sha256": "6c4b41d1cd7fb6939d2207de8f74af800f1215feab0636d3668b044a273e4a36"
-    },
-    {
-      "bytes": 7067,
-      "componentId": "completeness-and-test-synthesis",
-      "path": "skills/completeness-and-test-synthesis/SKILL.md",
-      "sha256": "e7149166dc4944bfb0c1076aa92d7af1df126e902d453087a30007261ec18641"
-    },
-    {
-      "bytes": 4242,
-      "componentId": "completeness-and-test-synthesis",
-      "path": "skills/completeness-and-test-synthesis/references/receipt-to-replay.md",
-      "sha256": "925cbb7cb33a554ee42cda22d0bc286c819ba3f0f53360ce28fd80737465447b"
-    },
-    {
-      "bytes": 6358,
-      "componentId": "incident-to-regression",
-      "path": "skills/incident-to-regression/SKILL.md",
-      "sha256": "51d4e744e4ca541467737408f6788e5cb692c64494e32ba184be81160e460039"
-    },
-    {
-      "bytes": 243,
-      "componentId": "incident-to-regression",
-      "path": "skills/incident-to-regression/agents/openai.yaml",
-      "sha256": "cf8480469d7e67dcacfa7bd285cec5fb3a306d3599c5f127215b6e72a735da06"
-    },
-    {
-      "bytes": 22849,
-      "componentId": "incident-to-regression",
-      "path": "skills/incident-to-regression/references/pitfall-patterns.md",
-      "sha256": "e7342eeee620239d5bc6a6a28294dbb64a700a2b552811aae4c1286e05bb06c2"
-    },
-    {
-      "bytes": 18399,
-      "componentId": "incident-to-regression",
-      "path": "skills/incident-to-regression/scripts/validate_incident_record.py",
-      "sha256": "b619a057a523fa4a7eab4667fc810f8f8065d7ad972692615997c66976d7974e"
-    },
-    {
-      "bytes": 23199,
-      "componentId": "long-run-supervisor",
-      "path": "skills/long-run-supervisor/SKILL.md",
-      "sha256": "6b3e0204a8032426dd96d7aae9699d6a1708c91351e6a20670801e1b6e004d2d"
-    },
-    {
-      "bytes": 312,
-      "componentId": "long-run-supervisor",
-      "path": "skills/long-run-supervisor/agents/openai.yaml",
-      "sha256": "2cd4ace92d8cfd39c6698b911ce4ae0dc56969e81d5d8f6c7a18de397a3db4cc"
-    },
-    {
-      "bytes": 34074,
-      "componentId": "long-run-supervisor",
-      "path": "skills/long-run-supervisor/scripts/long-run-supervisor.ps1",
-      "sha256": "dc4f9c3111a4071036a2a3f04d6ef8e6950b3e3d8e642b93dd16d95b271f7511"
-    },
-    {
-      "bytes": 5797,
-      "componentId": "long-run-supervisor",
-      "path": "skills/long-run-supervisor/tests/atomic-write-regression.ps1",
-      "sha256": "36f5a1dfaada7b4ab72b554bb8a06094cbc30a743eb7e6133915f49920e46f2d"
-    },
-    {
-      "bytes": 5329,
-      "componentId": "long-run-supervisor",
-      "path": "skills/long-run-supervisor/tests/smoke.ps1",
-      "sha256": "bf8495108ba2c5e5bfa292c1eebd2d3473a8db5757b49be830be52161c20f2a5"
-    },
-    {
       "bytes": 7244,
       "componentId": "operate-a2a-superhub",
       "path": "skills/operate-a2a-superhub/SKILL.md",
@@ -339,6 +171,13 @@
       "id": "openai-skills",
       "license": "See upstream",
       "version": "upstream-main-snapshot-2026-06-24"
+    },
+    {
+      "canonicalUrl": "https://github.com/phenomenoner/smart-agentic-engineering-toolkit",
+      "commit": "425dcbe248b7fbb0fc536eae145ccea23dc5a1e3",
+      "id": "smart-agentic-engineering-toolkit",
+      "license": "MIT",
+      "version": "0.1.0"
     },
     {
       "canonicalUrl": "https://github.com/Egonex-AI/Understand-Anything",
