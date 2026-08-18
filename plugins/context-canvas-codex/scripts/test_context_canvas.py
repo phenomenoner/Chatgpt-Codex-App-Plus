@@ -1788,7 +1788,8 @@ class ContextCanvasTests(unittest.TestCase):
         ) -> dict[str, dict]:
             home.mkdir()
             (home / hook_installer.INSTALLER_LOCK_FILE_NAME).write_bytes(b"")
-            expected = hook_installer._state(home)["expected"]
+            canonical_home = hook_installer._codex_home(os.fspath(home))
+            expected = hook_installer._state(canonical_home)["expected"]
             hooks = {
                 "description": "Groups-only compatibility fixture",
                 "hooks": {
