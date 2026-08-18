@@ -27,6 +27,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -108,6 +109,10 @@ SNAPSHOT_OBJECT_SCHEMA = "context-canvas-codex.snapshot-payload.v1"
 SNAPSHOT_PIN_SCHEMA = "context-canvas-codex.snapshot-pin.v1"
 SNAPSHOT_GC_SCHEMA = "context-canvas-codex.snapshot-gc-plan.v1"
 REFERENCE_SCHEMA = "context-canvas-codex.reference.v1"
+REFERENCE_SOURCE_RECEIPT_SCHEMA = (
+    "context-canvas-codex.reference-source-receipt.v1"
+)
+REFERENCE_MATCH_RANGE_SCHEMA = "context-canvas-codex.reference-match-range.v1"
 CAPTURE_REQUEST_SCHEMA = "context-canvas-codex.capture-request.v1"
 BOOTSTRAP_LOCK_NAME = ".context-canvas-codex.bootstrap.lock"
 SNAPSHOT_CONTENT_POLICIES = frozenset({"text-redacted", "opaque-uninspected"})
@@ -1676,6 +1681,71 @@ def _bounded_utf8_chunk(
     return chunk, None if end == len(value) else end
 
 
+def _casefold_match_span(
+    value: str, query: str
+) -> tuple[int, int, int, int] | None:
+    """Map the first casefold match back to whole source code points and bytes."""
+    needle = query.casefold()
+    folded_start = value.casefold().find(needle)
+    if folded_start < 0:
+        return None
+    folded_end = folded_start + len(needle)
+    folded_cursor = 0
+    byte_cursor = 0
+    char_start: int | None = None
+    byte_start: int | None = None
+    for char_index, character in enumerate(value):
+        next_folded = folded_cursor + len(character.casefold())
+        next_byte = byte_cursor + len(character.encode("utf-8"))
+        if char_start is None and folded_start < next_folded:
+            char_start = char_index
+            byte_start = byte_cursor
+        if char_start is not None and folded_end <= next_folded:
+            assert byte_start is not None
+            return char_start, char_index + 1, byte_start, next_byte
+        folded_cursor = next_folded
+        byte_cursor = next_byte
+    raise CanvasError("reference query match could not be mapped to source text")
+
+
+def _reference_source_receipt(
+    manifest: dict[str, Any], *, total_bytes: int
+) -> dict[str, Any]:
+    return {
+        "schema": REFERENCE_SOURCE_RECEIPT_SCHEMA,
+        "canvas_id": manifest["canvas_id"],
+        "reference_id": manifest["reference_id"],
+        "content_sha256": manifest["content_sha256"],
+        "total_bytes": total_bytes,
+    }
+
+
+def _reference_match_read_hint(
+    raw: bytes,
+    manifest: dict[str, Any],
+    *,
+    match_start_byte: int,
+    match_end_byte: int,
+) -> dict[str, Any]:
+    suggested_offset = max(0, match_start_byte - 2_048)
+    while suggested_offset < match_start_byte and raw[suggested_offset] & 0xC0 == 0x80:
+        suggested_offset += 1
+    suggested_max_bytes = min(
+        MAX_REFERENCE_READ_BYTES,
+        max(DEFAULT_REFERENCE_READ_BYTES, match_end_byte - suggested_offset),
+    )
+    return {
+        "schema": REFERENCE_MATCH_RANGE_SCHEMA,
+        "source": _reference_source_receipt(manifest, total_bytes=len(raw)),
+        "match_start_byte": match_start_byte,
+        "match_end_byte": match_end_byte,
+        "suggested_offset": suggested_offset,
+        "suggested_max_bytes": suggested_max_bytes,
+        "basis": "unicode_casefold_v1",
+        "unicode_version": unicodedata.unidata_version,
+    }
+
+
 def _is_context_canvas_tool(tool_name: str) -> bool:
     normalized = re.sub(r"[^a-z0-9]", "", tool_name.casefold())
     return normalized.startswith("mcpcontextcanvas")
@@ -2084,6 +2154,7 @@ class ReferenceStore:
             for manifest in manifests:
                 scope = "summary"
                 preview = manifest["summary"]
+                read_hint = None
                 if needle not in manifest["summary"].casefold():
                     if (
                         scanned_bytes + manifest["byte_length"]
@@ -2108,13 +2179,20 @@ class ReferenceStore:
                         continue
                     scanned_bytes += len(raw)
                     content = raw.decode("utf-8")
-                    index = content.casefold().find(needle)
-                    if index < 0:
+                    match = _casefold_match_span(content, query)
+                    if match is None:
                         continue
+                    char_start, char_end, match_start_byte, match_end_byte = match
                     scope = "content"
-                    start = max(0, index - 160)
-                    end = min(len(content), index + len(query) + 320)
+                    start = max(0, char_start - 160)
+                    end = min(len(content), char_end + 320)
                     preview = content[start:end]
+                    read_hint = _reference_match_read_hint(
+                        raw,
+                        manifest,
+                        match_start_byte=match_start_byte,
+                        match_end_byte=match_end_byte,
+                    )
                 hits.append(
                     {
                         "reference_id": manifest["reference_id"],
@@ -2129,6 +2207,7 @@ class ReferenceStore:
                         ],
                         "match_scope": scope,
                         "preview": preview,
+                        "read_hint": read_hint,
                     }
                 )
                 if len(hits) >= limit:

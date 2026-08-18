@@ -25,10 +25,10 @@
       "sha256": "14fc5530a71e04722a9e72a9177723fe0443eb3f639f60d36d87cd4a2d4e8ab3"
     },
     {
-      "bytes": 15363,
+      "bytes": 15442,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/README.md",
-      "sha256": "80a70969ee04ef2e92a1b7483e48a6902b572d5fa95c0f38006002d8621397e8"
+      "sha256": "85c11413ea8d05538fa57ced7d1756ad197da0ee1186b39e39cda739e5ac6d16"
     },
     {
       "bytes": 10076,
@@ -37,10 +37,10 @@
       "sha256": "cf6b0de4b8fc43d0d3bcbbdb48060f171a32b4aa0ae0f530748e3705485e1182"
     },
     {
-      "bytes": 11814,
+      "bytes": 12078,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/docs/SNAPSHOT_STORE_DESIGN.md",
-      "sha256": "78697a71fae50aa194323f05dc5e68289a3763315100dde1d021878c4384742d"
+      "sha256": "d4bd71b13f153bae2e7f5d37c1e084ee528d10de374ec3a5dad9c9b80efcc5ca"
     },
     {
       "bytes": 1555,
@@ -55,10 +55,10 @@
       "sha256": "65b3f1ab6b1d8fb69522fbd46d91d47b524fed294e5f21c9a5e36767c99ec3b6"
     },
     {
-      "bytes": 209917,
+      "bytes": 212898,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas.py",
-      "sha256": "4cc222fff9008f1d057beb9804857dd1181f55c0a64388604afb6e9b23abe94f"
+      "sha256": "aa56d60c7ec7135a7d4c9740ba55f51ad247dd7014fb3e36454969d4d92d90ef"
     },
     {
       "bytes": 28591,
@@ -73,10 +73,10 @@
       "sha256": "b05a2a7544f1538ab95b441e3267882569385d68a2495380670ce1ad53092aa5"
     },
     {
-      "bytes": 129538,
+      "bytes": 135283,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/test_context_canvas.py",
-      "sha256": "8cda00b97f648689eecca10c27c39631e08941c02aa98207804bfbbc2a160705"
+      "sha256": "14a6fade5d078f751765f03200fd7584f7797089d03ef72e8452f7f8810d62c7"
     },
     {
       "bytes": 9047,

@@ -90,7 +90,7 @@ Ordinary file and URL evidence pointers keep their existing pointer-plus-hash se
 
 Every manifest includes capture time, expiry, source identity, replayability, and a revalidation flag so historical evidence cannot be mistaken for current truth.
 
-Explicit managed references have a separate lifecycle: `reference_put` sanitizes and stores bounded UTF-8 text; `reference_search` returns bounded previews; `reference_read` returns byte-offset UTF-8 chunks plus a digest and next offset; `reference_delete` removes the manifest and body idempotently. References are also historical and require live-source revalidation for current-state claims.
+Explicit managed references have a separate lifecycle: `reference_put` sanitizes and stores bounded UTF-8 text; content hits from `reference_search` return bounded previews plus a digest-bound UTF-8 byte range and bounded read hint; `reference_read` returns byte-offset UTF-8 chunks plus a digest and next offset; `reference_delete` removes the manifest and body idempotently. Search uses exact Unicode casefold semantics without normalization, maps expansion matches back to whole source code points, and never reads a body solely to construct a summary-only hit. References are also historical and require live-source revalidation for current-state claims.
 
 ## Interfaces
 

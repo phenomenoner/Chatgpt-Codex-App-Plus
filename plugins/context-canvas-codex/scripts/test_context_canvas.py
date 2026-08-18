@@ -266,6 +266,129 @@ class ContextCanvasTests(unittest.TestCase):
         with self.assertRaisesRegex(canvas.CanvasError, "not found"):
             references.read(self.canvas_id, stored["reference_id"])
 
+    def test_reference_search_returns_digest_bound_unicode_byte_ranges(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        fixtures = (
+            ("ASCII", "before ASCII-Needle after", "ascii-needle", "ASCII-Needle"),
+            ("CJK", "before 漢字 after", "漢字", "漢字"),
+            ("emoji", "before 🙂 after", "🙂", "🙂"),
+            ("combining", "before E\u0301 after", "e\u0301", "E\u0301"),
+            ("casefold expansion", "before Straße after", "STRASSE", "Straße"),
+            ("partial casefold expansion", "before ß after", "s", "ß"),
+        )
+
+        for index, (label, content, query, matched_text) in enumerate(fixtures):
+            with self.subTest(label=label):
+                stored = references.put(
+                    self.canvas_id,
+                    summary=f"Byte range fixture {index}",
+                    content=content,
+                    source=f"fixture:{index}",
+                )
+                search = references.search(self.canvas_id, query)
+                hit = next(
+                    item
+                    for item in search["hits"]
+                    if item["reference_id"] == stored["reference_id"]
+                )
+                hint = hit["read_hint"]
+                raw = content.encode("utf-8")
+                expected = matched_text.encode("utf-8")
+                expected_start = raw.index(expected)
+                expected_end = expected_start + len(expected)
+
+                self.assertEqual(
+                    hint["schema"],
+                    "context-canvas-codex.reference-match-range.v1",
+                )
+                self.assertEqual(hint["basis"], "unicode_casefold_v1")
+                self.assertTrue(hint["unicode_version"])
+                self.assertEqual(hint["match_start_byte"], expected_start)
+                self.assertEqual(hint["match_end_byte"], expected_end)
+                self.assertEqual(raw[expected_start:expected_end], expected)
+                self.assertLessEqual(hint["suggested_offset"], expected_start)
+                self.assertGreaterEqual(
+                    hint["suggested_offset"] + hint["suggested_max_bytes"],
+                    expected_end,
+                )
+                self.assertLessEqual(
+                    hint["suggested_max_bytes"], canvas.MAX_REFERENCE_READ_BYTES
+                )
+                self.assertEqual(
+                    hint["source"],
+                    {
+                        "schema": (
+                            "context-canvas-codex.reference-source-receipt.v1"
+                        ),
+                        "canvas_id": self.canvas_id,
+                        "reference_id": stored["reference_id"],
+                        "content_sha256": stored["content_sha256"],
+                        "total_bytes": len(raw),
+                    },
+                )
+
+                reread = references.read(
+                    self.canvas_id,
+                    stored["reference_id"],
+                    offset=hint["suggested_offset"],
+                    max_bytes=hint["suggested_max_bytes"],
+                )
+                reread_raw = reread["chunk"].encode("utf-8")
+                relative_start = expected_start - hint["suggested_offset"]
+                relative_end = expected_end - hint["suggested_offset"]
+                self.assertEqual(reread_raw[relative_start:relative_end], expected)
+
+        self.assertEqual(
+            references.search(self.canvas_id, "é")["hits"],
+            [],
+            "search must not silently add Unicode normalization",
+        )
+
+    def test_reference_summary_hit_does_not_read_body_for_range_receipt(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        stored = references.put(
+            self.canvas_id,
+            summary="Unique summary-only token",
+            content="This body must not be read for a summary-only hit.",
+        )
+
+        with mock.patch.object(
+            references,
+            "_read_content_unlocked",
+            side_effect=AssertionError("summary-only search read the body"),
+        ):
+            search = references.search(self.canvas_id, "summary-only")
+
+        self.assertEqual(search["hits"][0]["reference_id"], stored["reference_id"])
+        self.assertEqual(search["hits"][0]["match_scope"], "summary")
+        self.assertIsNone(search["hits"][0]["read_hint"])
+
+    def test_reference_search_range_respects_canvas_and_scan_budget(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        other_canvas_id = canvas.derive_canvas_id("other-reference-canvas")
+        stored = references.put(
+            other_canvas_id,
+            summary="Isolated range fixture",
+            content="body-only-range-token",
+        )
+
+        self.assertEqual(
+            references.search(self.canvas_id, "body-only-range-token")["hits"],
+            [],
+        )
+        with mock.patch.object(
+            canvas,
+            "MAX_REFERENCE_SEARCH_SCAN_BYTES",
+            stored["byte_length"] - 1,
+        ):
+            limited = references.search(other_canvas_id, "body-only-range-token")
+
+        self.assertEqual(limited["hits"], [])
+        self.assertEqual(
+            limited["skipped"],
+            [{"reference_id": stored["reference_id"], "reason": "scan_limit"}],
+        )
+
     def test_reference_store_enforces_its_per_canvas_capacity(self) -> None:
         references = canvas.ReferenceStore(root=self.root)
         with mock.patch.object(canvas, "MAX_REFERENCES_PER_CANVAS", 1):
@@ -1495,9 +1618,18 @@ class ContextCanvasTests(unittest.TestCase):
                     },
                 }
             )
+            search_result = reference_search["result"]["structuredContent"]
             self.assertEqual(
-                reference_search["result"]["structuredContent"]["hits"][0]["reference_id"],
+                search_result["hits"][0]["reference_id"],
                 stored_reference["reference_id"],
+            )
+            self.assertEqual(
+                search_result["hits"][0]["read_hint"]["source"]["content_sha256"],
+                stored_reference["content_sha256"],
+            )
+            self.assertLess(
+                len(json.dumps(reference_search, ensure_ascii=False).encode("utf-8")),
+                1024 * 1024,
             )
             reference_delete = request(
                 {
