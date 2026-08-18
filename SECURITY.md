@@ -22,4 +22,7 @@ running as the same user.
 
 ## Supported versions
 
-Security fixes apply to the default branch until tagged releases are introduced. Pointer-only dependencies follow their upstream security and support policies.
+Security fixes for Context Canvas target the latest `context-canvas-codex-v*`
+component release and the default branch. Older component tags are not
+guaranteed to receive backports. Pointer-only dependencies follow their
+upstream security and support policies.

@@ -22,7 +22,7 @@ The best Codex workflows rarely live in one file. They emerge across durable ins
 
 ## Included components
 
-The bundle includes the `context-canvas-codex` plugin and the optional `operate-a2a-superhub` skill. Context Canvas provides optional session navigation for goals, decisions, progress, dependencies, blockers, and next steps; explicit searchable and chunk-readable text references; and default-off, one-shot historical tool snapshots. Hook-derived IDs are transport provenance for Canvas actions, not task authority. Missing Canvas state never blocks the underlying work.
+The bundle includes the `context-canvas-codex` plugin and the optional `operate-a2a-superhub` skill. Context Canvas provides optional session navigation for goals, decisions, progress, dependencies, blockers, and next steps; explicit text references with digest-bound search ranges, chunk reads, and deterministic previews; and default-off, one-shot historical tool snapshots. Hook-derived IDs are transport provenance for Canvas actions, not task authority. Missing Canvas state never blocks the underlying work.
 
 Components that already have a canonical public home stay as versioned pointers instead of copied forks. General planning, specification, review, testing, delegation, recovery, and release workflows now live in the [Smart Agentic Engineering Toolkit](https://github.com/phenomenoner/smart-agentic-engineering-toolkit). Codex users are also pointed directly to the [Codex-specialized Baton branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing), while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
 
@@ -47,7 +47,7 @@ codex plugin list
 Install the Context Canvas plugin from this repository marketplace:
 
 ```powershell
-codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref main
+codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref context-canvas-codex-v0.6.0
 codex plugin add context-canvas-codex@codex-app-plus
 codex plugin list
 ```
@@ -97,7 +97,7 @@ Read [the architecture](docs/architecture.md) and [weekly sync contract](docs/we
 
 ## Context Canvas layers
 
-The current design does not equate “preserve useful context” with “create a semantic node.” `reference_put`, `reference_search`, `reference_read`, and `reference_delete` provide explicit redacted text offload with bounded native retrieval. `PostToolUse` persistence is off by default: `snapshot_capture_next` arms one expiring request, exact tool mismatches do not consume it, Canvas self-tools are ignored, and a match consumes it once. The captured model-facing payload still uses the declared sanitization, content-addressing, dedupe, TTL, pin, and integrity-checked GC policies. Snapshot bodies stay outside task-map search and lifecycle injection; an explicit MCP/CLI read returns bounded chunks, while complete file export remains CLI-only.
+Context Canvas 0.6 does not equate “preserve useful context” with “create a semantic node.” `reference_put`, `reference_search`, `reference_preview`, `reference_read`, and `reference_delete` provide explicit redacted text offload with bounded native retrieval. Content-search hits carry the source digest, exact UTF-8 byte range, and a directly usable read hint. `reference_preview` explicitly applies either `log-v1` or strict line-oriented `search-results-v1` and returns ephemeral exact source slices under a caller-supplied budget. It never runs automatically, rewrites the stored body, creates a derived cache, or substitutes a lossy summary for the original. `PostToolUse` persistence is off by default: `snapshot_capture_next` arms one expiring request, exact tool mismatches do not consume it, Canvas self-tools are ignored, and a match consumes it once. The captured model-facing payload still uses the declared sanitization, content-addressing, dedupe, TTL, pin, and integrity-checked GC policies. Snapshot bodies stay outside task-map search and lifecycle injection; an explicit MCP/CLI read returns bounded chunks, while complete file export remains CLI-only.
 
 Current Codex invokes `PostToolUse` when a supported handler returns an opted-in post-tool payload. That is a host transport surface, not a Canvas persistence decision. A Bash command with a non-zero exit can still produce the callback; dispatch or handler failures that produce no callback payload remain absent. After installation, prove actual capture in a fresh task by arming one harmless exact call and inspecting its new manifest; plugin discovery or configuration state alone is insufficient.
 

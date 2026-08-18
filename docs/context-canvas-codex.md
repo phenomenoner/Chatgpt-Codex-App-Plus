@@ -26,7 +26,7 @@ adaptation; no Hermes source code is copied.
 | Task binding | SHA-256 of trusted `SessionStart.session_id` or `UserPromptSubmit.session_id`; workspace paths remain metadata |
 | Initialization | Explicit `canvas_start` only when navigation or context offload has a concrete benefit; no duration trigger |
 | Session map | Canvas JSON v3 with objective state, lineage compatibility, dependency edges, bounded search, Mermaid, and closeout |
-| Long-context offload | `reference_put`, `reference_search`, `reference_read`, and `reference_delete` over bounded policy-redacted UTF-8 text |
+| Long-context offload | `reference_put`, digest-bound `reference_search`, explicit `reference_preview`, bounded `reference_read`, and `reference_delete` over policy-redacted UTF-8 text |
 | Historical capture | `snapshot_capture_next` arms one expiring request; a matching non-Canvas callback consumes it once; capture is otherwise off |
 | Retrieval | Map metadata, reference text, and requested snapshot payloads have separate bounded read surfaces |
 | Integrity | Content digests, canonical JSON, deterministic gzip, path/ACL checks, cross-process locks, and atomic replacement |
@@ -106,9 +106,19 @@ textual secret-redaction policy, stores deterministic gzip content, and returns
 a deterministic ID bound to the Canvas, summary, source, and sanitized content
 digest. `reference_read` returns a byte-offset UTF-8 chunk,
 `next_offset`, total length, and content digest. `reference_search` scans a
-bounded amount of reference text inside one Canvas and returns bounded previews.
-Corrupt or scan-budget-skipped entries remain visible through bounded reason
-codes and `skipped_count`.
+bounded amount of reference text inside one Canvas. Content hits return a
+bounded display preview plus a source receipt, exact UTF-8 match byte range,
+and a digest-bound `reference_read` hint; summary-only hits do not read the
+body. Corrupt or scan-budget-skipped entries remain visible through bounded
+reason codes and `skipped_count`.
+
+`reference_preview` is a separate explicit read for large logs or strict
+line-oriented search results. `log-v1` and `search-results-v1` return ephemeral
+exact source-byte segments under a caller-supplied output budget. The operation
+does not rewrite the reference, create an index or cache, run automatically, or
+fall back to a lossy summary. `not_needed`, `no_signal`, `unsupported_format`,
+and `not_smaller` are ordinary bounded outcomes; callers use `reference_read`
+separately when they still need original text.
 `reference_delete` removes one manifest/body pair idempotently.
 
 References are historical untrusted data. Search hits and chunks are not
@@ -144,7 +154,8 @@ The local stdio MCP server exposes:
 
 - `canvas_start`, `canvas_continue`, `canvas_list`, `canvas_upsert_node`,
   `canvas_set_status`, `canvas_read`, `canvas_search`, `canvas_closeout`;
-- `reference_put`, `reference_read`, `reference_search`, `reference_delete`;
+- `reference_put`, `reference_read`, `reference_search`, `reference_preview`,
+  `reference_delete`;
 - `snapshot_capture_next`, `snapshot_capture_cancel`, `snapshot_list`,
   `snapshot_read`, `snapshot_pin`, `snapshot_gc`.
 
@@ -155,6 +166,7 @@ remains an explicit CLI operation.
 ```powershell
 python -I scripts/context_canvas.py reference-put --canvas-id <opaque-id> --summary "Exploration summary" --content-file <absolute-utf8-text-file>
 python -I scripts/context_canvas.py reference-search "query" --canvas-id <opaque-id>
+python -I scripts/context_canvas.py reference-preview --canvas-id <opaque-id> --reference-id <ref-id> --lens log-v1 --query "optional exact signal" --max-output-bytes 8192
 python -I scripts/context_canvas.py reference-read --canvas-id <opaque-id> --reference-id <ref-id> --offset 0 --max-bytes 16384
 python -I scripts/context_canvas.py snapshot-capture-next --canvas-id <opaque-id> --tool-name <exact-tool-name>
 python -I scripts/context_canvas.py snapshot-list --canvas-id <opaque-id> --limit 20
@@ -170,7 +182,7 @@ as the CLI invocation.
 ## Install and prove only the surface you use
 
 ```powershell
-codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref main
+codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref context-canvas-codex-v0.6.0
 codex plugin add context-canvas-codex@codex-app-plus
 codex plugin list
 ```
