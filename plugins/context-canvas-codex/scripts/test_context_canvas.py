@@ -24,6 +24,12 @@ SPEC = importlib.util.spec_from_file_location("context_canvas_under_test", SCRIP
 assert SPEC is not None and SPEC.loader is not None
 canvas = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(canvas)
+INSTALLER_SPEC = importlib.util.spec_from_file_location(
+    "context_canvas_hook_installer_under_test", HOOK_INSTALLER_SCRIPT
+)
+assert INSTALLER_SPEC is not None and INSTALLER_SPEC.loader is not None
+hook_installer = importlib.util.module_from_spec(INSTALLER_SPEC)
+INSTALLER_SPEC.loader.exec_module(hook_installer)
 
 
 class ContextCanvasTests(unittest.TestCase):
@@ -1245,6 +1251,29 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn("manual approval of newly installed hooks", skill)
         self.assertIn("inspect `/hooks`", skill)
 
+    def test_public_compatibility_contract_keeps_host_mechanics_non_authorizing(self) -> None:
+        readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
+        security = (PLUGIN_ROOT / "SECURITY.md").read_text(encoding="utf-8")
+        design = (PLUGIN_ROOT / "docs" / "SNAPSHOT_STORE_DESIGN.md").read_text(
+            encoding="utf-8"
+        )
+        manifest = json.loads(
+            (PLUGIN_ROOT / ".codex-plugin" / "plugin.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for document in (readme, security):
+            self.assertIn("manifest-bound v1", document)
+            self.assertIn("v2", document)
+            self.assertIn("v3", document)
+            self.assertIn("host coordination metadata", document)
+            self.assertIn("wildcard", document)
+        self.assertIn("manifest-bound v1/v2/v3", design)
+        self.assertIn("host-scoped OS lock", design)
+        self.assertIn("never matches a callback", design)
+        self.assertIn("not an authority", manifest["interface"]["longDescription"])
+
     def test_user_hook_installer_preserves_peers_checks_drift_and_uninstalls_exactly(self) -> None:
         codex_home = self.base / "codex-home"
         codex_home.mkdir()
@@ -1647,7 +1676,15 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn("drift", " ".join(drifted["errors"]).lower())
         run("uninstall", expected=1)
         self.assertTrue(installed_script.exists())
-        run("install")
+        drifted_bytes = installed_script.read_bytes()
+        hooks_before_refusal = hooks_path.read_bytes()
+        manifest_path = codex_home / "context-canvas-codex" / "hook-install.json"
+        manifest_before_refusal = manifest_path.read_bytes()
+        run("install", expected=1)
+        self.assertEqual(installed_script.read_bytes(), drifted_bytes)
+        self.assertEqual(hooks_path.read_bytes(), hooks_before_refusal)
+        self.assertEqual(manifest_path.read_bytes(), manifest_before_refusal)
+        installed_script.write_bytes(SCRIPT.read_bytes())
 
         _, removed = run("uninstall")
         self.assertTrue(removed["ok"])
@@ -1657,6 +1694,279 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertEqual(hooks["hooks"]["UserPromptSubmit"], [])
         self.assertEqual(hooks["hooks"]["PostToolUse"], [])
         self.assertFalse(installed_script.exists())
+
+    def test_user_hook_installer_refuses_unproven_adapter_and_noncanonical_manifests(self) -> None:
+        codex_home = self.base / "owned-manifest-codex-home"
+        hook_installer.install(codex_home)
+        install_dir = codex_home / "context-canvas-codex"
+        script_path = install_dir / "context_canvas.py"
+        manifest_path = install_dir / "hook-install.json"
+
+        def snapshot() -> dict[str, bytes]:
+            return {
+                path.relative_to(codex_home).as_posix(): path.read_bytes()
+                for path in sorted(codex_home.rglob("*"))
+                if path.is_file()
+            }
+
+        script_path.write_bytes(b"unproven third digest")
+        drifted = snapshot()
+        with self.assertRaises(hook_installer.InstallerError):
+            hook_installer.install(codex_home)
+        self.assertEqual(snapshot(), drifted)
+        with self.assertRaises(hook_installer.InstallerError):
+            hook_installer.uninstall(codex_home)
+        self.assertEqual(snapshot(), drifted)
+
+        script_path.write_bytes(SCRIPT.read_bytes())
+        original_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        bad_manifests: list[tuple[str, dict]] = []
+
+        extra = json.loads(json.dumps(original_manifest))
+        extra["unexpected"] = True
+        bad_manifests.append(("extra field", extra))
+
+        missing = json.loads(json.dumps(original_manifest))
+        missing.pop("hooks_file")
+        bad_manifests.append(("missing field", missing))
+
+        wrong_target = json.loads(json.dumps(original_manifest))
+        wrong_target["hooks_file"] = "other-hooks.json"
+        bad_manifests.append(("wrong hooks target", wrong_target))
+
+        nonhex = json.loads(json.dumps(original_manifest))
+        nonhex["installed_sha256"] = "z" * 64
+        bad_manifests.append(("nonhex digest", nonhex))
+
+        uppercase = json.loads(json.dumps(original_manifest))
+        uppercase["handlers_sha256"]["SessionStart"] = "A" * 64
+        bad_manifests.append(("uppercase digest", uppercase))
+
+        incoherent = json.loads(json.dumps(original_manifest))
+        incoherent["installed_sha256"] = "0" * 64
+        bad_manifests.append(("incoherent digests", incoherent))
+
+        mixed_events = json.loads(json.dumps(original_manifest))
+        mixed_events["handlers_sha256"].pop("UserPromptSubmit")
+        bad_manifests.append(("mixed event set", mixed_events))
+
+        for label, manifest in bad_manifests:
+            with self.subTest(label=label):
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                before = snapshot()
+                with self.assertRaises(hook_installer.InstallerError):
+                    hook_installer.install(codex_home)
+                self.assertEqual(snapshot(), before)
+                with self.assertRaises(hook_installer.InstallerError):
+                    hook_installer.uninstall(codex_home)
+                self.assertEqual(snapshot(), before)
+
+        manifest_path.write_text(json.dumps(original_manifest), encoding="utf-8")
+        self.assertTrue(hook_installer.check(codex_home)["ok"])
+
+    def test_user_hook_installer_lock_serializes_cooperating_processes(self) -> None:
+        codex_home = self.base / "locked-codex-home"
+        hook_installer.install(codex_home)
+
+        def launch(action: str, home: Path) -> subprocess.Popen[str]:
+            return subprocess.Popen(
+                [
+                    sys.executable,
+                    "-B",
+                    "-I",
+                    str(HOOK_INSTALLER_SCRIPT),
+                    action,
+                    "--codex-home",
+                    str(home),
+                ],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                creationflags=(
+                    getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                    if os.name == "nt"
+                    else 0
+                ),
+            )
+
+        def finish(process: subprocess.Popen[str]) -> dict:
+            stdout, stderr = process.communicate(timeout=30)
+            self.assertEqual(process.returncode, 0, stderr or stdout)
+            return json.loads(stdout)
+
+        for action in ("check", "install", "uninstall"):
+            with self.subTest(action=action):
+                if not (codex_home / "context-canvas-codex" / "hook-install.json").exists():
+                    hook_installer.install(codex_home)
+                with hook_installer._installer_lock(codex_home):
+                    process = launch(action, codex_home)
+                    with self.assertRaises(subprocess.TimeoutExpired):
+                        process.wait(timeout=0.75)
+                finish(process)
+
+        peer_group = {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python peer-hook.py",
+                    "statusMessage": "Unrelated peer",
+                }
+            ]
+        }
+
+        def seed(home: Path) -> None:
+            hook_installer.install(home)
+            hooks_path = home / "hooks.json"
+            hooks = json.loads(hooks_path.read_text(encoding="utf-8"))
+            hooks["hooks"]["SessionStart"].insert(0, peer_group)
+            hooks_path.write_text(json.dumps(hooks), encoding="utf-8")
+
+        for index, actions in enumerate(
+            (("install", "install"), ("install", "uninstall"), ("uninstall", "uninstall"))
+        ):
+            with self.subTest(actions=actions):
+                home = self.base / f"concurrent-installer-{index}"
+                seed(home)
+                first = launch(actions[0], home)
+                second = launch(actions[1], home)
+                finish(first)
+                finish(second)
+                hooks = json.loads((home / "hooks.json").read_text(encoding="utf-8"))
+                self.assertIn(peer_group, hooks["hooks"]["SessionStart"])
+                script_exists = (
+                    home / "context-canvas-codex" / "context_canvas.py"
+                ).exists()
+                manifest_exists = (
+                    home / "context-canvas-codex" / "hook-install.json"
+                ).exists()
+                self.assertEqual(script_exists, manifest_exists)
+                if manifest_exists:
+                    self.assertTrue(hook_installer.check(home)["ok"])
+                else:
+                    recognized = {
+                        *hook_installer.MANAGED_MARKERS.values(),
+                        *hook_installer.PRIOR_V04_MANAGED_MARKERS.values(),
+                    }
+                    statuses = {
+                        handler.get("statusMessage")
+                        for groups in hooks["hooks"].values()
+                        for group in groups
+                        if isinstance(group, dict)
+                        for handler in group.get("hooks", [])
+                        if isinstance(handler, dict)
+                    }
+                    self.assertTrue(recognized.isdisjoint(statuses))
+
+    def test_user_hook_installer_retry_converges_after_each_write_or_archive(self) -> None:
+        peer_group = {
+            "matcher": "^resume$",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python peer-hook.py",
+                    "statusMessage": "Unrelated peer",
+                }
+            ],
+        }
+
+        def write_peer_hooks(home: Path) -> None:
+            home.mkdir(parents=True)
+            (home / "hooks.json").write_text(
+                json.dumps(
+                    {
+                        "description": "Existing user hooks",
+                        "hooks": {"SessionStart": [peer_group]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+        def assert_current(home: Path) -> None:
+            self.assertTrue(hook_installer.check(home)["ok"])
+            hooks = json.loads((home / "hooks.json").read_text(encoding="utf-8"))
+            self.assertIn(peer_group, hooks["hooks"]["SessionStart"])
+
+        def assert_retired(home: Path) -> None:
+            install_dir = home / "context-canvas-codex"
+            self.assertFalse((install_dir / "context_canvas.py").exists())
+            self.assertFalse((install_dir / "hook-install.json").exists())
+            hooks = json.loads((home / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(hooks["hooks"]["SessionStart"], [peer_group])
+            self.assertEqual(hooks["hooks"]["UserPromptSubmit"], [])
+            self.assertEqual(hooks["hooks"]["PostToolUse"], [])
+
+        original_atomic_write = hook_installer._atomic_write
+        for boundary in range(1, 5):
+            with self.subTest(operation="install", boundary=boundary):
+                home = self.base / f"install-interruption-{boundary}"
+                write_peer_hooks(home)
+                calls = 0
+
+                def interrupt_after_write(path: Path, value: bytes) -> None:
+                    nonlocal calls
+                    original_atomic_write(path, value)
+                    calls += 1
+                    if calls == boundary:
+                        raise OSError("injected install interruption")
+
+                with mock.patch.object(
+                    hook_installer, "_atomic_write", side_effect=interrupt_after_write
+                ):
+                    with self.assertRaises(OSError):
+                        hook_installer.install(home)
+                hook_installer.install(home)
+                assert_current(home)
+
+        hook_write_home = self.base / "uninstall-hook-write-interruption"
+        write_peer_hooks(hook_write_home)
+        hook_installer.install(hook_write_home)
+        hook_write_calls = 0
+
+        def interrupt_uninstall_hook_write(path: Path, value: bytes) -> None:
+            nonlocal hook_write_calls
+            original_atomic_write(path, value)
+            hook_write_calls += 1
+            if hook_write_calls == 1:
+                raise OSError("injected uninstall hook-write interruption")
+
+        with mock.patch.object(
+            hook_installer, "_atomic_write", side_effect=interrupt_uninstall_hook_write
+        ):
+            with self.assertRaises(OSError):
+                hook_installer.uninstall(hook_write_home)
+        hook_installer.uninstall(hook_write_home)
+        assert_retired(hook_write_home)
+
+        original_archive_owned = hook_installer._archive_owned
+        for boundary in (1, 2):
+            with self.subTest(operation="uninstall-archive", boundary=boundary):
+                home = self.base / f"uninstall-archive-interruption-{boundary}"
+                write_peer_hooks(home)
+                hook_installer.install(home)
+                calls = 0
+
+                def interrupt_after_archive(
+                    path: Path, install_dir: Path, label: str
+                ) -> str | None:
+                    nonlocal calls
+                    result = original_archive_owned(path, install_dir, label)
+                    calls += 1
+                    if calls == boundary:
+                        raise OSError("injected uninstall archive interruption")
+                    return result
+
+                with mock.patch.object(
+                    hook_installer,
+                    "_archive_owned",
+                    side_effect=interrupt_after_archive,
+                ):
+                    with self.assertRaises(OSError):
+                        hook_installer.uninstall(home)
+                hook_installer.uninstall(home)
+                assert_retired(home)
 
     def test_user_hook_installer_rejects_aliased_install_directory(self) -> None:
         codex_home = self.base / "alias-codex-home"
@@ -3469,6 +3779,96 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         requests.arm(self.canvas_id, tool_name="mcp__web__open", now=now)
         self.assertTrue(requests.cancel(self.canvas_id)["cancelled"])
         self.assertFalse(requests.cancel(self.canvas_id)["cancelled"])
+
+    def test_capture_request_retires_only_canonical_legacy_wildcard(self) -> None:
+        requests = canvas.CaptureRequestStore(root=self.root)
+        now = datetime(2026, 8, 18, tzinfo=timezone.utc)
+
+        def write_legacy(*, ttl_minutes: int = 2) -> tuple[Path, dict]:
+            requests.arm(
+                self.canvas_id,
+                tool_name="mcp__web__open",
+                ttl_minutes=ttl_minutes,
+                now=now,
+            )
+            request_root = requests._request_root(create=False)
+            assert request_root is not None
+            path = requests._path(request_root, self.canvas_id)
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload["tool_name"] = "*"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            return path, payload
+
+        for invalid_tool_name in (None, "", "*"):
+            with self.subTest(fresh_tool_name=invalid_tool_name):
+                with self.assertRaises(canvas.CanvasError):
+                    requests.arm(
+                        self.canvas_id,
+                        tool_name=invalid_tool_name,
+                        now=now,
+                    )
+
+        path, _ = write_legacy()
+        self.assertTrue(requests.cancel(self.canvas_id)["cancelled"])
+        self.assertFalse(path.exists())
+        self.assertFalse(requests.cancel(self.canvas_id)["cancelled"])
+
+        path, _ = write_legacy()
+        replaced = requests.arm(
+            self.canvas_id,
+            tool_name="mcp__web__open",
+            ttl_minutes=2,
+            now=now,
+        )
+        self.assertTrue(replaced["replaced"])
+        self.assertEqual(
+            requests.consume_for_hook(
+                self.hook_payload(tool_name="mcp__web__search"), now=now
+            )["reason"],
+            "tool_mismatch",
+        )
+        self.assertTrue(path.exists())
+        self.assertTrue(requests.consume_for_hook(self.hook_payload(), now=now)["capture"])
+        self.assertFalse(path.exists())
+
+        path, _ = write_legacy()
+        nonexpired = requests.consume_for_hook(self.hook_payload(), now=now)
+        self.assertEqual(nonexpired, {"capture": False, "reason": "legacy_wildcard_request"})
+        self.assertTrue(path.exists())
+        self.assertEqual(
+            requests.consume_for_hook(
+                self.hook_payload(tool_name="mcp__context_canvas__canvas_read"),
+                now=now,
+            )["reason"],
+            "self_tool",
+        )
+        self.assertTrue(path.exists())
+
+        expired = requests.consume_for_hook(
+            self.hook_payload(), now=now + timedelta(minutes=2)
+        )
+        self.assertEqual(expired, {"capture": False, "reason": "expired"})
+        self.assertFalse(path.exists())
+
+        mutations = (
+            ("wrong identity", lambda value: value.__setitem__(
+                "canvas_id", canvas.derive_canvas_id("foreign-session")
+            )),
+            ("invalid ttl", lambda value: value.__setitem__(
+                "expires_at", value["armed_at"]
+            )),
+            ("extra field", lambda value: value.__setitem__("unexpected", True)),
+        )
+        for label, mutate in mutations:
+            with self.subTest(malformed=label):
+                path, payload = write_legacy()
+                mutate(payload)
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                before = path.read_bytes()
+                with self.assertRaises(canvas.CorruptCanvasError):
+                    requests.consume_for_hook(self.hook_payload(), now=now)
+                self.assertEqual(path.read_bytes(), before)
+                path.unlink()
 
     def test_oversize_hook_input_fails_open_without_partial_snapshot(self) -> None:
         payload = self.hook_payload(response={"text": "x" * 4096})

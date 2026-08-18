@@ -81,7 +81,10 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py ch
 再確認 `_snapshots/events` 出現且只出現該次 request 的新 manifest。
 Codex CLI 0.146.0 的先前本機實測是
 plugin MCP/skill 會載入、plugin-bundled hook 卻未執行；這個顯式 installer
-就是相容層，並會保留既有 hooks 與 hash-addressed backup。安裝、catalog
+就是相容層。它只接受精確 manifest-bound v1/v2/v3 hook generations 與可證明
+owned 的 adapter bytes，保留既有 hooks 與 hash-addressed backup，並用單一
+Codex-home-scoped OS lock 序列化 cooperating install/check/uninstall；該 lock
+只是 host coordination metadata，不是 Canvas 狀態或工作 gate。安裝、catalog
 discovery 或 tool call 顯示 `started` 都不等於實際執行完成。
 
 本 repo 不再複製 general-engineering skills。若要安裝仍由這裡維護的選配
@@ -121,7 +124,7 @@ Codex 的 personal config、project config 與命令列 override 有明確優先
 
 0.6 把四件事拆開：hook-derived opaque ID 只是 Canvas transport provenance；session map 提供目標、決策、進度、依賴、阻塞與下一步導航；大型文字結果用 `reference_put/search/preview/read/delete` 明示 offload 與有界回取；歷史 tool payload 只有先呼叫 `snapshot_capture_next` 才保存下一個匹配 callback。Canvas 不是 source of truth、授權系統、WAL、release gate 或 workflow engine，缺少 identity、map 或 lineage 不會阻塞工作。`canvas_start` 只在導航有具體價值時建立；同 ID 的文字差異只回報 conflict、不覆寫，跨 session 延續仍用 `canvas_continue` 明示前身以保留 v3 相容性。
 
-明示 reference 會先套用文字 redaction，再以 bounded UTF-8 chunks 原生回取。內容搜尋結果帶有 source digest、精確 UTF-8 byte range 與可直接使用的 read hint；`reference_preview` 則用 `log-v1` 或嚴格 line-oriented `search-results-v1` 產生 ephemeral exact slices。Preview 不會自動執行、不改寫 stored body、不建立衍生 cache，也不以 lossy summary 冒充原文；無法形成更小的安全預覽時會回傳明確 bounded status。Reference 是歷史資料，若要做 current-state claim 仍需重查 live source。Snapshot capture 預設關閉；armed request 有 expiry、只消耗一次、精確 tool mismatch 不會消耗，Canvas 自己的工具也會被忽略。匹配時保存 hook 收到的完整 model-facing payload（依宣告 policy sanitization，超過上限則整筆跳過而不截斷），並以 SHA-256＋deterministic gzip 做 dedupe。Sanitizer 與既有 TTL、pin、transitive blob 驗證及 GC 相容行為保留。`snapshot_list` 回傳 manifest；`snapshot_read(include_payload=true)` 可明示讀取 bounded chunks，完整本機檔案 export 仍走 CLI。
+明示 reference 會先套用文字 redaction，再以 bounded UTF-8 chunks 原生回取。內容搜尋結果帶有 source digest、精確 UTF-8 byte range 與可直接使用的 read hint；`reference_preview` 則用 `log-v1` 或嚴格 line-oriented `search-results-v1` 產生 ephemeral exact slices。Preview 不會自動執行、不改寫 stored body、不建立衍生 cache，也不以 lossy summary 冒充原文；無法形成更小的安全預覽時會回傳明確 bounded status。Reference 是歷史資料，若要做 current-state claim 仍需重查 live source。Snapshot capture 預設關閉；armed request 有 expiry、只消耗一次、精確 tool mismatch 不會消耗，Canvas 自己的工具也會被忽略。前版留下且其他欄位完全 canonical 的 wildcard request 只允許 cancel、exact replace 或 expiry retirement，永不匹配 callback；其他 malformed state 保留並 fail closed。匹配時保存 hook 收到的完整 model-facing payload（依宣告 policy sanitization，超過上限則整筆跳過而不截斷），並以 SHA-256＋deterministic gzip 做 dedupe。Sanitizer 與既有 TTL、pin、transitive blob 驗證及 GC 相容行為保留。`snapshot_list` 回傳 manifest；`snapshot_read(include_payload=true)` 可明示讀取 bounded chunks，完整本機檔案 export 仍走 CLI。
 
 目前 Codex 會在支援的 handler 回傳已 opt-in post-tool payload 時呼叫 `PostToolUse`；這是 host transport surface，不是 Canvas 的自動保存規則。Bash 即使 non-zero exit 仍可能有 callback；dispatch／handler failure 若沒有 callback payload 就無法保存。安裝後應在全新 task 先 arm 一次 harmless exact tool call，再檢查新 manifest；不能只看 plugin catalog 或設定檔推論 capture 已生效。
 

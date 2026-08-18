@@ -2912,7 +2912,10 @@ class CaptureRequestStore:
 
     @staticmethod
     def _validate_request(
-        payload: dict[str, Any], *, expected_canvas_id: str
+        payload: dict[str, Any],
+        *,
+        expected_canvas_id: str,
+        allow_legacy_wildcard: bool = False,
     ) -> dict[str, Any]:
         if set(payload) != {
             "schema",
@@ -2936,7 +2939,7 @@ class CaptureRequestStore:
             raise CorruptCanvasError("capture request validation failed") from exc
         if canvas_id != expected_canvas_id:
             raise CorruptCanvasError("capture request identity does not match its path")
-        if tool_name in {"", "*"}:
+        if tool_name == "" or (tool_name == "*" and not allow_legacy_wildcard):
             raise CorruptCanvasError("capture request tool name is invalid")
         ttl = expires_at - armed_at
         if not timedelta(minutes=1) <= ttl <= timedelta(
@@ -3001,6 +3004,7 @@ class CaptureRequestStore:
                         label="capture request",
                     ),
                     expected_canvas_id=canvas_id,
+                    allow_legacy_wildcard=True,
                 )
             _atomic_write_json(
                 path, request, maximum_bytes=MAX_REFERENCE_MANIFEST_BYTES
@@ -3024,6 +3028,7 @@ class CaptureRequestStore:
                     label="capture request",
                 ),
                 expected_canvas_id=canvas_id,
+                allow_legacy_wildcard=True,
             )
             path.unlink()
             return {"ok": True, "canvas_id": canvas_id, "cancelled": True}
@@ -3055,11 +3060,14 @@ class CaptureRequestStore:
                     label="capture request",
                 ),
                 expected_canvas_id=canvas_id,
+                allow_legacy_wildcard=True,
             )
             current = _snapshot_now(now)
             if current >= _parse_snapshot_iso(request["expires_at"]):
                 path.unlink()
                 return {"capture": False, "reason": "expired"}
+            if request["tool_name"] == "*":
+                return {"capture": False, "reason": "legacy_wildcard_request"}
             if request["tool_name"] != tool_name:
                 return {"capture": False, "reason": "tool_mismatch"}
             path.unlink()

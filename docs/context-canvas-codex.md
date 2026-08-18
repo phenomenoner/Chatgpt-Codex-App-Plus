@@ -210,10 +210,21 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py in
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-The compatibility installer recognizes the exact manifest-bound 0.4
-three-hook definitions as a supported prior generation. It replaces one proven
-prior group per event, preserves unrelated peers, and refuses duplicates,
-ambiguity, or foreign drift; check and uninstall use the same ownership set.
+The compatibility installer recognizes only exact manifest-bound v1
+SessionStart-only, v2 SessionStart-plus-PostToolUse, and v3 three-hook
+generations, including the predecessor 0.4 definitions. Canonical targets,
+exact fields and event sets, coherent lowercase SHA-256 digests, and the live
+adapter digest must all prove ownership before replacement. A third digest,
+duplicate or marker-only handler, ambiguity, or foreign path is refused without
+changing the pre-existing adapter, manifest, hooks, or backup inventory.
+
+Install, check, and uninstall share one Codex-home-scoped exclusive OS lock for
+the complete compatibility transition. Its stable empty file is host
+coordination metadata, not Canvas state, authorization, or a task gate. An
+otherwise canonical wildcard capture request from the predecessor release is
+also compatibility-only state: it never captures and can only be cancelled,
+replaced by one exact request, or removed on expiry. Other malformed request
+state is preserved and rejected.
 
 A missing binding means Canvas actions are unavailable, not that the task is
 blocked. To prove capture, open a fresh task, obtain its hook-derived ID, arm one

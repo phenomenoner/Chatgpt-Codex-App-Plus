@@ -15,8 +15,10 @@ The Context Canvas MCP server is local stdio only. It exposes an optional task m
 The Context Canvas hook compatibility installer is an explicit user-config
 mutation, not an automatic post-install action. It may add only its exact
 `SessionStart`, `UserPromptSubmit`, and `PostToolUse` groups, preserve unrelated hooks, keep a content-addressed backup,
-and fail closed on foreign or drifted owned files. It recovers a script-first
-interruption only when the installed bytes exactly match the current source. Legacy migration additionally binds the recorded SessionStart handler and installed-file digests to the owned bytes. A plugin upgrade requires a
+and fail closed on foreign or drifted owned files. Exact manifest-bound v1,
+v2, and v3 generations require canonical targets, fields, event sets, coherent
+lowercase digests, and a live adapter matching the manifest or current source.
+It recovers a script-first interruption only when the installed bytes exactly match the current source. Install, check, and uninstall share one stable Codex-home-scoped OS lock across the complete transition; this is host coordination metadata, not Canvas authority or a task gate. A plugin upgrade requires a
 new installer `check`; Codex hook trust does not sandbox other software already
 running as the same user.
 

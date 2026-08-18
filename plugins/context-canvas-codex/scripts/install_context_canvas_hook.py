@@ -11,14 +11,16 @@ explicit capture request is armed.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
+import re
 import shlex
 import stat
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 
 SCHEMA = "context-canvas-codex-hook-install.v3"
@@ -29,6 +31,7 @@ INSTALL_DIR_NAME = "context-canvas-codex"
 INSTALLED_SCRIPT_NAME = "context_canvas.py"
 INSTALL_MANIFEST_NAME = "hook-install.json"
 HOOKS_FILE_NAME = "hooks.json"
+INSTALLER_LOCK_FILE_NAME = ".context-canvas-codex-installer.lock"
 SESSION_STATUS_MESSAGE = "Restoring optional Context Canvas map [context-canvas-codex user hook]"
 TURN_STATUS_MESSAGE = "Refreshing optional Canvas binding [context-canvas-codex user hook]"
 SNAPSHOT_STATUS_MESSAGE = "Checking explicit Canvas capture request [context-canvas-codex user hook]"
@@ -46,6 +49,7 @@ PRIOR_V04_MANAGED_MARKERS = {
     "PostToolUse": "Archiving tool snapshot [context-canvas-codex user hook]",
 }
 MAX_JSON_BYTES = 1024 * 1024
+CANONICAL_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 class InstallerError(RuntimeError):
@@ -98,6 +102,126 @@ def _regular_file_bytes(path: Path, label: str) -> bytes:
     if metadata.st_size > MAX_JSON_BYTES:
         raise InstallerError(f"{label} exceeds its bounded size")
     return path.read_bytes()
+
+
+def _plain_empty_lock_metadata(path: Path) -> os.stat_result:
+    if not _lexists(path):
+        raise InstallerError("Context Canvas installer lock file is missing")
+    metadata = os.lstat(path)
+    if stat.S_ISLNK(metadata.st_mode) or _is_reparse_point(metadata):
+        raise InstallerError(
+            "Context Canvas installer lock must not be an alias or reparse point"
+        )
+    if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+        raise InstallerError(
+            "Context Canvas installer lock must have one regular-file link"
+        )
+    if metadata.st_size != 0:
+        raise InstallerError("Context Canvas installer lock must remain empty")
+    return metadata
+
+
+def _verify_open_lock_identity(lock_path: Path, descriptor: int) -> None:
+    path_metadata = _plain_empty_lock_metadata(lock_path)
+    descriptor_metadata = os.fstat(descriptor)
+    if (
+        not stat.S_ISREG(descriptor_metadata.st_mode)
+        or descriptor_metadata.st_nlink != 1
+        or descriptor_metadata.st_size != 0
+        or not os.path.samestat(path_metadata, descriptor_metadata)
+    ):
+        raise InstallerError("Context Canvas installer lock identity changed")
+
+
+@contextlib.contextmanager
+def _installer_lock(codex_home: Path) -> Iterator[None]:
+    """Serialize this compatibility installer's host-configuration transition."""
+
+    _require_plain_directory(codex_home, "Codex home")
+    lock_path = codex_home / INSTALLER_LOCK_FILE_NAME
+    flags = os.O_RDWR | getattr(os, "O_BINARY", 0)
+    try:
+        descriptor = os.open(lock_path, flags | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        _plain_empty_lock_metadata(lock_path)
+        descriptor = os.open(lock_path, flags)
+    lock_file = os.fdopen(descriptor, "r+b", buffering=0)
+    try:
+        _verify_open_lock_identity(lock_path, lock_file.fileno())
+        if os.name == "nt":
+            import ctypes
+            import msvcrt
+            from ctypes import wintypes
+
+            ulong_ptr = (
+                ctypes.c_ulonglong
+                if ctypes.sizeof(ctypes.c_void_p) == 8
+                else ctypes.c_ulong
+            )
+
+            class Overlapped(ctypes.Structure):
+                _fields_ = [
+                    ("Internal", ulong_ptr),
+                    ("InternalHigh", ulong_ptr),
+                    ("Offset", wintypes.DWORD),
+                    ("OffsetHigh", wintypes.DWORD),
+                    ("hEvent", wintypes.HANDLE),
+                ]
+
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            lock_file_ex = kernel32.LockFileEx
+            lock_file_ex.argtypes = [
+                wintypes.HANDLE,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                ctypes.POINTER(Overlapped),
+            ]
+            lock_file_ex.restype = wintypes.BOOL
+            unlock_file_ex = kernel32.UnlockFileEx
+            unlock_file_ex.argtypes = [
+                wintypes.HANDLE,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                wintypes.DWORD,
+                ctypes.POINTER(Overlapped),
+            ]
+            unlock_file_ex.restype = wintypes.BOOL
+            handle = wintypes.HANDLE(msvcrt.get_osfhandle(lock_file.fileno()))
+            overlapped = Overlapped()
+            if not lock_file_ex(
+                handle,
+                0x00000002,
+                0,
+                0xFFFFFFFF,
+                0xFFFFFFFF,
+                ctypes.byref(overlapped),
+            ):
+                raise InstallerError("Context Canvas installer lock acquisition failed")
+            try:
+                _verify_open_lock_identity(lock_path, lock_file.fileno())
+                yield
+            finally:
+                if not unlock_file_ex(
+                    handle,
+                    0,
+                    0xFFFFFFFF,
+                    0xFFFFFFFF,
+                    ctypes.byref(overlapped),
+                ):
+                    raise InstallerError("Context Canvas installer lock release failed")
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            try:
+                _verify_open_lock_identity(lock_path, lock_file.fileno())
+                yield
+            finally:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    finally:
+        lock_file.close()
 
 
 def _load_json(path: Path, label: str, *, missing: Any = None) -> Any:
@@ -366,27 +490,46 @@ def _load_owned_manifest(path: Path) -> dict[str, Any] | None:
         LEGACY_SCHEMA,
     }:
         raise InstallerError("Context Canvas hook install manifest is foreign or invalid")
+    schema = payload["schema"]
+    expected_fields = {
+        "schema",
+        "source_sha256",
+        "installed_sha256",
+        "hooks_file",
+        "installed_script",
+        "handler_sha256" if schema == LEGACY_SCHEMA else "handlers_sha256",
+    }
+    if set(payload) != expected_fields:
+        raise InstallerError("Context Canvas hook install manifest fields are invalid")
+    if payload.get("hooks_file") != HOOKS_FILE_NAME:
+        raise InstallerError("Context Canvas hook install manifest hooks target is invalid")
     if payload.get("installed_script") != f"{INSTALL_DIR_NAME}/{INSTALLED_SCRIPT_NAME}":
         raise InstallerError("Context Canvas hook install manifest target is invalid")
     for field in ("source_sha256", "installed_sha256"):
         value = payload.get(field)
-        if not isinstance(value, str) or len(value) != 64:
+        if not isinstance(value, str) or CANONICAL_SHA256_RE.fullmatch(value) is None:
             raise InstallerError(f"Context Canvas hook install manifest field {field} is invalid")
-    if payload.get("schema") == LEGACY_SCHEMA:
+    if payload["source_sha256"] != payload["installed_sha256"]:
+        raise InstallerError("Context Canvas hook install manifest digests are incoherent")
+    if schema == LEGACY_SCHEMA:
         value = payload.get("handler_sha256")
-        if not isinstance(value, str) or len(value) != 64:
+        if not isinstance(value, str) or CANONICAL_SHA256_RE.fullmatch(value) is None:
             raise InstallerError("legacy Context Canvas handler digest is invalid")
     else:
         handler_hashes = payload.get("handlers_sha256")
         expected_events = (
             set(MANAGED_EVENTS)
-            if payload.get("schema") == SCHEMA
+            if schema == SCHEMA
             else {"SessionStart", "PostToolUse"}
         )
         if (
             not isinstance(handler_hashes, dict)
             or set(handler_hashes) != expected_events
-            or any(not isinstance(value, str) or len(value) != 64 for value in handler_hashes.values())
+            or any(
+                not isinstance(value, str)
+                or CANONICAL_SHA256_RE.fullmatch(value) is None
+                for value in handler_hashes.values()
+            )
         ):
             raise InstallerError("Context Canvas handler digests are invalid")
     return payload
@@ -433,7 +576,7 @@ def _state(codex_home: Path) -> dict[str, Any]:
     }
 
 
-def check(codex_home: Path) -> dict[str, Any]:
+def _check_unlocked(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     errors: list[str] = []
     try:
@@ -476,12 +619,16 @@ def check(codex_home: Path) -> dict[str, Any]:
     }
 
 
-def install(codex_home: Path) -> dict[str, Any]:
-    _ensure_plain_directory(codex_home, "Codex home")
+def check(codex_home: Path) -> dict[str, Any]:
+    _require_plain_directory(codex_home, "Codex home")
+    with _installer_lock(codex_home):
+        return _check_unlocked(codex_home)
+
+
+def _install_unlocked(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     _ensure_plain_directory(state["install_dir"], "Context Canvas install directory")
     manifest = _load_owned_manifest(state["manifest_path"])
-    hooks = _hooks_document(state["hooks_path"])
     if _lexists(state["installed_script"]) and manifest is None:
         interrupted_hash = _sha256_bytes(
             _regular_file_bytes(
@@ -496,21 +643,21 @@ def install(codex_home: Path) -> dict[str, Any]:
         installed_hash = _sha256_bytes(
             _regular_file_bytes(state["installed_script"], "installed Context Canvas hook script")
         )
+    if (
+        manifest is not None
+        and installed_hash is not None
+        and installed_hash not in {manifest["installed_sha256"], state["source_hash"]}
+    ):
+        raise InstallerError(
+            "Context Canvas installed script digest does not match the manifest or current file"
+        )
     generation = _manifest_generation(
         manifest,
         current_groups=state["expected"],
         prior_groups=state["prior_v04_expected"],
     )
     prior_owned_events = _prior_owned_events(generation)
-    if (
-        prior_owned_events
-        and installed_hash is not None
-        and installed_hash
-        not in {manifest["installed_sha256"], state["source_hash"]}
-    ):
-        raise InstallerError(
-            "Context Canvas installed script digest does not match the owned or current file"
-        )
+    hooks = _hooks_document(state["hooks_path"])
     group_indexes = {
         event_name: _managed_group_index(
             hooks["hooks"][event_name],
@@ -546,7 +693,7 @@ def install(codex_home: Path) -> dict[str, Any]:
         _atomic_write(state["hooks_path"], _json_bytes(hooks))
         _atomic_write(state["manifest_path"], _json_bytes(expected_manifest))
 
-    verified = check(codex_home)
+    verified = _check_unlocked(codex_home)
     if not verified["ok"]:
         raise InstallerError("post-install verification failed: " + "; ".join(verified["errors"]))
     return {
@@ -557,6 +704,12 @@ def install(codex_home: Path) -> dict[str, Any]:
         "backup": backup,
         "errors": [],
     }
+
+
+def install(codex_home: Path) -> dict[str, Any]:
+    _ensure_plain_directory(codex_home, "Codex home")
+    with _installer_lock(codex_home):
+        return _install_unlocked(codex_home)
 
 
 def _archive_owned(path: Path, install_dir: Path, label: str) -> str | None:
@@ -575,7 +728,7 @@ def _archive_owned(path: Path, install_dir: Path, label: str) -> str | None:
     return f"{INSTALL_DIR_NAME}/retired/{candidate.name}"
 
 
-def uninstall(codex_home: Path) -> dict[str, Any]:
+def _uninstall_unlocked(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     manifest = _load_owned_manifest(state["manifest_path"])
     hooks = _hooks_document(state["hooks_path"])
@@ -632,6 +785,12 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
         "archived": archived,
         "errors": [],
     }
+
+
+def uninstall(codex_home: Path) -> dict[str, Any]:
+    _require_plain_directory(codex_home, "Codex home")
+    with _installer_lock(codex_home):
+        return _uninstall_unlocked(codex_home)
 
 
 def main(argv: list[str] | None = None) -> int:

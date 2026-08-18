@@ -14,7 +14,7 @@ References preserve selected useful text; one-shot snapshots preserve what the a
 
 ## Fidelity boundary
 
-Capture is off unless `snapshot_capture_next` has armed one visible, expiring request for a nonempty exact tool name. Omission, empty input, and implicit wildcard capture are rejected before request persistence. The source is then the next exactly matching non-Canvas Codex `PostToolUse` hook payload, and the request is consumed once. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload; a Bash command that exits non-zero can still produce it. Dispatch or handler failures that produce no callback payload remain absent. For MCP calls it contains the MCP call result; for other supported tools it normally contains the model-facing result. A snapshot therefore proves what Codex delivered to this hook, not necessarily the provider's private wire response, and it cannot prove that every attempted call was observed.
+Capture is off unless `snapshot_capture_next` has armed one visible, expiring request for a nonempty exact tool name. Omission, empty input, and implicit wildcard capture are rejected before request persistence. An otherwise canonical wildcard request from the predecessor release is recognized only so explicit cancel, exact replacement, or expiry can retire it; it never matches a callback, while other malformed wildcard-like state remains intact and fails closed. The source is then the next exactly matching non-Canvas Codex `PostToolUse` hook payload, and the request is consumed once. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload; a Bash command that exits non-zero can still produce it. Dispatch or handler failures that produce no callback payload remain absent. For MCP calls it contains the MCP call result; for other supported tools it normally contains the model-facing result. A snapshot therefore proves what Codex delivered to this hook, not necessarily the provider's private wire response, and it cannot prove that every attempted call was observed.
 
 The stored object contains the full captured `tool_input` and `tool_response` after deterministic sanitization. It is never silently truncated. If the hook input exceeds the configured hard limit or cannot be parsed, capture fails as an explicit observation error rather than writing a partial object.
 
@@ -130,6 +130,6 @@ The implementation is accepted only with focused evidence for:
 - transitive-integrity pin promotion and expiry-safe garbage collection;
 - exact GC preview, orphan sweep, pending-plan recovery, and corrupt-graph preflight before mutation;
 - corruption, nested-alias, manifest-identity, oversize, and concurrent-writer behavior;
-- installer merge/uninstall, exact legacy owner-digest migration, drift refusal, and interrupted-install recovery for `SessionStart`, `UserPromptSubmit`, and `PostToolUse` handlers;
+- installer merge/uninstall for exact manifest-bound v1/v2/v3 generations, live-adapter drift refusal, one host-scoped OS lock across cooperating transitions, and interrupted-write/archive retry recovery for `SessionStart`, `UserPromptSubmit`, and `PostToolUse` handlers;
 - MCP message bounds and CLI error behavior; and
 - measured hook latency and compression ratios on representative small and large payloads.
