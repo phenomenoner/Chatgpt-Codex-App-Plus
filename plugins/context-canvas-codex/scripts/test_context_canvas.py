@@ -1330,17 +1330,57 @@ class ContextCanvasTests(unittest.TestCase):
             foreign_interrupted_script.read_text(encoding="utf-8"), "foreign bytes"
         )
 
+        prior_markers = {
+            "SessionStart": "Restoring Context Canvas [context-canvas-codex user hook]",
+            "UserPromptSubmit": "Refreshing Context Canvas identity [context-canvas-codex user hook]",
+            "PostToolUse": "Archiving tool snapshot [context-canvas-codex user hook]",
+        }
+
         v2_home = self.base / "v2-codex-home"
         run("install", home=v2_home)
         v2_hooks_path = v2_home / "hooks.json"
         v2_hooks = json.loads(v2_hooks_path.read_text(encoding="utf-8"))
         v2_hooks["hooks"]["UserPromptSubmit"] = []
+        for event_name in ("SessionStart", "PostToolUse"):
+            v2_hooks["hooks"][event_name][0]["hooks"][0][
+                "statusMessage"
+            ] = prior_markers[event_name]
         v2_hooks_path.write_text(json.dumps(v2_hooks), encoding="utf-8")
         v2_manifest_path = v2_home / "context-canvas-codex" / "hook-install.json"
         v2_manifest = json.loads(v2_manifest_path.read_text(encoding="utf-8"))
         v2_manifest["schema"] = "context-canvas-codex-hook-install.v2"
-        v2_manifest["handlers_sha256"].pop("UserPromptSubmit")
+        v2_manifest["handlers_sha256"] = {
+            event_name: hashlib.sha256(
+                (
+                    json.dumps(
+                        v2_hooks["hooks"][event_name][0],
+                        ensure_ascii=False,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            ).hexdigest()
+            for event_name in ("SessionStart", "PostToolUse")
+        }
         v2_manifest_path.write_text(json.dumps(v2_manifest), encoding="utf-8")
+        v2_fixture_hooks = json.loads(json.dumps(v2_hooks))
+        v2_fixture_manifest = json.loads(json.dumps(v2_manifest))
+        run("uninstall", home=v2_home)
+        retired_v2_hooks = json.loads(
+            v2_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(
+            {event_name: len(retired_v2_hooks[event_name]) for event_name in retired_v2_hooks},
+            {"SessionStart": 0, "UserPromptSubmit": 0, "PostToolUse": 0},
+        )
+        (v2_home / "context-canvas-codex" / "context_canvas.py").write_bytes(
+            SCRIPT.read_bytes()
+        )
+        v2_hooks_path.write_text(json.dumps(v2_fixture_hooks), encoding="utf-8")
+        v2_manifest_path.write_text(
+            json.dumps(v2_fixture_manifest), encoding="utf-8"
+        )
         _, migrated_v2 = run("install", home=v2_home)
         self.assertTrue(migrated_v2["changed"])
         self.assertEqual(
@@ -1351,16 +1391,20 @@ class ContextCanvasTests(unittest.TestCase):
             len(json.loads(v2_hooks_path.read_text(encoding="utf-8"))["hooks"]["UserPromptSubmit"]),
             1,
         )
+        migrated_v2_hooks = json.loads(
+            v2_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(len(migrated_v2_hooks["SessionStart"]), 1)
+        self.assertEqual(len(migrated_v2_hooks["PostToolUse"]), 1)
+        self.assertNotEqual(
+            migrated_v2_hooks["SessionStart"][0]["hooks"][0]["statusMessage"],
+            prior_markers["SessionStart"],
+        )
 
         prior_v04_home = self.base / "prior-v04-codex-home"
         run("install", home=prior_v04_home)
         prior_v04_hooks_path = prior_v04_home / "hooks.json"
         prior_v04_hooks = json.loads(prior_v04_hooks_path.read_text(encoding="utf-8"))
-        prior_markers = {
-            "SessionStart": "Restoring Context Canvas [context-canvas-codex user hook]",
-            "UserPromptSubmit": "Refreshing Context Canvas identity [context-canvas-codex user hook]",
-            "PostToolUse": "Archiving tool snapshot [context-canvas-codex user hook]",
-        }
         for event_name, status_message in prior_markers.items():
             prior_v04_hooks["hooks"][event_name][0]["hooks"][0][
                 "statusMessage"
@@ -1402,6 +1446,25 @@ class ContextCanvasTests(unittest.TestCase):
         }
         prior_v04_manifest_path.write_text(
             json.dumps(prior_v04_manifest), encoding="utf-8"
+        )
+
+        prior_v04_fixture_hooks = json.loads(json.dumps(prior_v04_hooks))
+        prior_v04_fixture_manifest = json.loads(json.dumps(prior_v04_manifest))
+        run("uninstall", home=prior_v04_home)
+        prior_v04_retired_directly = json.loads(
+            prior_v04_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(prior_v04_retired_directly["SessionStart"], [])
+        self.assertEqual(prior_v04_retired_directly["UserPromptSubmit"], [peer_group])
+        self.assertEqual(prior_v04_retired_directly["PostToolUse"], [])
+        (
+            prior_v04_home / "context-canvas-codex" / "context_canvas.py"
+        ).write_bytes(SCRIPT.read_bytes())
+        prior_v04_hooks_path.write_text(
+            json.dumps(prior_v04_fixture_hooks), encoding="utf-8"
+        )
+        prior_v04_manifest_path.write_text(
+            json.dumps(prior_v04_fixture_manifest), encoding="utf-8"
         )
 
         _, upgraded_v04 = run("install", home=prior_v04_home)
@@ -1452,6 +1515,10 @@ class ContextCanvasTests(unittest.TestCase):
         run("install", home=legacy_home)
         legacy_hooks_path = legacy_home / "hooks.json"
         legacy_hooks = json.loads(legacy_hooks_path.read_text(encoding="utf-8"))
+        legacy_hooks["hooks"]["SessionStart"][0]["hooks"][0][
+            "statusMessage"
+        ] = prior_markers["SessionStart"]
+        legacy_hooks["hooks"]["UserPromptSubmit"] = []
         legacy_hooks["hooks"]["PostToolUse"] = []
         legacy_hooks_path.write_text(json.dumps(legacy_hooks), encoding="utf-8")
         legacy_manifest_path = (
@@ -1481,6 +1548,27 @@ class ContextCanvasTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
+        legacy_fixture_hooks = json.loads(json.dumps(legacy_hooks))
+        legacy_fixture_manifest = json.loads(
+            legacy_manifest_path.read_text(encoding="utf-8")
+        )
+        run("uninstall", home=legacy_home)
+        retired_legacy_hooks = json.loads(
+            legacy_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(
+            {event_name: len(retired_legacy_hooks[event_name]) for event_name in retired_legacy_hooks},
+            {"SessionStart": 0, "UserPromptSubmit": 0, "PostToolUse": 0},
+        )
+        (legacy_home / "context-canvas-codex" / "context_canvas.py").write_bytes(
+            SCRIPT.read_bytes()
+        )
+        legacy_hooks_path.write_text(
+            json.dumps(legacy_fixture_hooks), encoding="utf-8"
+        )
+        legacy_manifest_path.write_text(
+            json.dumps(legacy_fixture_manifest), encoding="utf-8"
+        )
         _, migrated = run("install", home=legacy_home)
         self.assertTrue(migrated["changed"])
         migrated_manifest = json.loads(
@@ -1490,6 +1578,13 @@ class ContextCanvasTests(unittest.TestCase):
             migrated_manifest["schema"], "context-canvas-codex-hook-install.v3"
         )
         self.assertTrue(run("check", home=legacy_home)[1]["ok"])
+        migrated_legacy_hooks = json.loads(
+            legacy_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(
+            {event_name: len(migrated_legacy_hooks[event_name]) for event_name in migrated_legacy_hooks},
+            {"SessionStart": 1, "UserPromptSubmit": 1, "PostToolUse": 1},
+        )
 
         bad_legacy_home = self.base / "bad-legacy-codex-home"
         run("install", home=bad_legacy_home)

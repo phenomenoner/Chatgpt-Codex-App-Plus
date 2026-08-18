@@ -287,19 +287,57 @@ def _manifest_generation(
 ) -> str:
     if manifest is None:
         return "none"
+    current_hashes = _handler_hashes(current_groups)
+    prior_hashes = _handler_hashes(prior_groups)
     if manifest["schema"] == SCHEMA:
         handler_hashes = manifest["handlers_sha256"]
-        if handler_hashes == _handler_hashes(current_groups):
+        if handler_hashes == current_hashes:
             return "current"
         if (
-            handler_hashes == _handler_hashes(prior_groups)
+            handler_hashes == prior_hashes
             and manifest["source_sha256"] == manifest["installed_sha256"]
         ):
             return "prior-v04"
         raise InstallerError(
             "Context Canvas v3 manifest does not identify a supported managed hook definition"
         )
-    return "legacy"
+    if manifest["schema"] == PREVIOUS_SCHEMA:
+        handler_hashes = manifest["handlers_sha256"]
+        events = {"SessionStart", "PostToolUse"}
+        if handler_hashes == {
+            event_name: current_hashes[event_name] for event_name in events
+        }:
+            return "current-v02"
+        if (
+            handler_hashes
+            == {event_name: prior_hashes[event_name] for event_name in events}
+            and manifest["source_sha256"] == manifest["installed_sha256"]
+        ):
+            return "prior-v02"
+        raise InstallerError(
+            "Context Canvas v2 manifest does not identify a supported managed hook definition"
+        )
+    handler_hash = manifest["handler_sha256"]
+    if handler_hash == current_hashes["SessionStart"]:
+        return "current-v01"
+    if (
+        handler_hash == prior_hashes["SessionStart"]
+        and manifest["source_sha256"] == manifest["installed_sha256"]
+    ):
+        return "prior-v01"
+    raise InstallerError(
+        "Context Canvas v1 manifest does not identify a supported managed hook definition"
+    )
+
+
+def _prior_owned_events(generation: str) -> set[str]:
+    if generation == "prior-v04":
+        return set(MANAGED_EVENTS)
+    if generation == "prior-v02":
+        return {"SessionStart", "PostToolUse"}
+    if generation == "prior-v01":
+        return {"SessionStart"}
+    return set()
 
 
 def _manifest_payload(
@@ -463,8 +501,9 @@ def install(codex_home: Path) -> dict[str, Any]:
         current_groups=state["expected"],
         prior_groups=state["prior_v04_expected"],
     )
+    prior_owned_events = _prior_owned_events(generation)
     if (
-        generation == "prior-v04"
+        prior_owned_events
         and installed_hash is not None
         and installed_hash
         not in {manifest["installed_sha256"], state["source_hash"]}
@@ -478,24 +517,12 @@ def install(codex_home: Path) -> dict[str, Any]:
             expected_group,
             marker=MANAGED_MARKERS[event_name],
             alternate_expected=(state["prior_v04_expected"][event_name],)
-            if generation == "prior-v04"
+            if event_name in prior_owned_events
             else (),
             alternate_markers=(PRIOR_V04_MANAGED_MARKERS[event_name],),
         )
         for event_name, expected_group in state["expected"].items()
     }
-    if manifest is not None and manifest["schema"] == LEGACY_SCHEMA:
-        expected_legacy_handler_hash = _sha256_bytes(
-            _json_bytes(state["expected"]["SessionStart"])
-        )
-        if manifest["handler_sha256"] != expected_legacy_handler_hash:
-            raise InstallerError(
-                "legacy Context Canvas SessionStart handler digest does not match the managed hook"
-            )
-        if installed_hash != manifest["installed_sha256"]:
-            raise InstallerError(
-                "legacy Context Canvas installed script digest does not match the owned file"
-            )
     expected_manifest = _manifest_payload(state["source_hash"], state["expected"])
     changed = (
         installed_hash != state["source_hash"]
@@ -557,13 +584,14 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
         current_groups=state["expected"],
         prior_groups=state["prior_v04_expected"],
     )
+    prior_owned_events = _prior_owned_events(generation)
     group_indexes = {
         event_name: _managed_group_index(
             hooks["hooks"][event_name],
             expected_group,
             marker=MANAGED_MARKERS[event_name],
             alternate_expected=(state["prior_v04_expected"][event_name],)
-            if generation == "prior-v04"
+            if event_name in prior_owned_events
             else (),
             alternate_markers=(PRIOR_V04_MANAGED_MARKERS[event_name],),
         )
