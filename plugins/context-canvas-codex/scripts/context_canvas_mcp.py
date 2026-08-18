@@ -309,13 +309,13 @@ TOOLS = [
     {
         "name": "snapshot_capture_next",
         "description": (
-            "Arm one visible, expiring request to capture the next matching non-Canvas "
+            "Arm one visible, expiring request to capture the next exact matching non-Canvas "
             "PostToolUse payload. Capture is off unless this tool is called."
         ),
         "inputSchema": _object_schema(
             {
                 "canvas_id": {"type": "string", "pattern": "^cc-[0-9a-f]{64}$"},
-                "tool_name": {"type": "string", "maxLength": 512},
+                "tool_name": {"type": "string", "minLength": 1, "maxLength": 512},
                 "retention_days": {
                     "type": "integer",
                     "minimum": 1,
@@ -327,8 +327,8 @@ TOOLS = [
                     "maximum": canvas.MAX_CAPTURE_REQUEST_TTL_MINUTES,
                 },
             },
-            ["canvas_id"],
-            description="Arm one explicit one-shot snapshot capture request.",
+            ["canvas_id", "tool_name"],
+            description="Arm one explicit exact-tool one-shot snapshot capture request.",
         ),
     },
     {

@@ -14,7 +14,7 @@ References preserve selected useful text; one-shot snapshots preserve what the a
 
 ## Fidelity boundary
 
-Capture is off unless `snapshot_capture_next` has armed one visible, expiring request. The source is then the next matching non-Canvas Codex `PostToolUse` hook payload, and the request is consumed once. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload; a Bash command that exits non-zero can still produce it. Dispatch or handler failures that produce no callback payload remain absent. For MCP calls it contains the MCP call result; for other supported tools it normally contains the model-facing result. A snapshot therefore proves what Codex delivered to this hook, not necessarily the provider's private wire response, and it cannot prove that every attempted call was observed.
+Capture is off unless `snapshot_capture_next` has armed one visible, expiring request for a nonempty exact tool name. Omission, empty input, and implicit wildcard capture are rejected before request persistence. The source is then the next exactly matching non-Canvas Codex `PostToolUse` hook payload, and the request is consumed once. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload; a Bash command that exits non-zero can still produce it. Dispatch or handler failures that produce no callback payload remain absent. For MCP calls it contains the MCP call result; for other supported tools it normally contains the model-facing result. A snapshot therefore proves what Codex delivered to this hook, not necessarily the provider's private wire response, and it cannot prove that every attempted call was observed.
 
 The stored object contains the full captured `tool_input` and `tool_response` after deterministic sanitization. It is never silently truncated. If the hook input exceeds the configured hard limit or cannot be parsed, capture fails as an explicit observation error rather than writing a partial object.
 
@@ -44,7 +44,7 @@ context-canvas-codex/
 
 - Object identity is the SHA-256 of canonical uncompressed JSON. Identical sanitized payloads deduplicate even when several tool calls reference them.
 - Gzip is deterministic and available in the Python standard library. This keeps the plugin dependency-free on Codex App and CLI hosts.
-- Supported embedded `data:` URLs are decoded into content-addressed blobs. Textual MIME content is redacted before persistence and records `text-redacted`; other media records `opaque-uninspected`. The JSON object stores a typed blob reference and export rehydrates a canonical base64 data URL.
+- Supported embedded `data:` URLs are decoded into content-addressed blobs. Textual MIME content is redacted before persistence and records `text-redacted`; other media records `opaque-uninspected`. A V2 object stores generated slots plus path-bound root provenance, and export rehydrates only those proven slots as canonical base64 data URLs. Caller-supplied dictionaries that resemble the retired V1 marker remain literal JSON. Markerless V1 objects remain readable; V1 objects containing an ambiguous blob marker fail closed rather than being silently rewritten.
 - Each observation manifest records provenance independently from the deduplicated object.
 - Reference and snapshot bodies are excluded from lifecycle injection and closeout. `reference_search` scans only bounded policy-redacted reference text in one Canvas; snapshot bodies are excluded from map and reference search.
 
@@ -121,10 +121,10 @@ Hook stdout stays empty on success, so snapshots consume storage rather than mod
 The implementation is accepted only with focused evidence for:
 
 - complete round-trip capture and CLI export, including Unicode and embedded binary data;
-- default-off capture, exact-tool matching, one-shot consumption, expiry, cancellation, and Canvas self-tool exclusion;
-- explicit reference sanitization, bounded search, UTF-8 chunk reconstruction, digest validation, and idempotent deletion;
+- default-off capture, required exact-tool arming across MCP and CLI, omission/empty rejection before mutation, one-shot consumption, expiry, cancellation, and Canvas self-tool exclusion;
+- explicit reference sanitization, interruption-safe deterministic pair completion, visible incomplete-pair corruption, bounded search, UTF-8 chunk reconstruction, digest validation, and idempotent deletion;
 - deterministic sanitization including suffix-qualified, percent/form-encoded, malformed-percent, bracket-decorated, JSON-escaped, escaped-wrapper, and mixed-representation assignment keys, with safe neighboring query controls preserved, secret sentinels absent from every inspected textual or decompressed file, and explicit opaque-media policy;
-- textual data-URL body and whole-value MIME-parameter redaction that self-validates before persistence and survives read, export, promotion, and GC preflight;
+- textual data-URL body and whole-value MIME-parameter redaction with path-bound blob provenance that preserves literal marker-shaped JSON, self-validates before persistence, fails closed on ambiguous V1 markers, and survives read, export, promotion, and GC preflight;
 - content-addressed deduplication and idempotent event capture;
 - snapshot exclusion from semantic search;
 - transitive-integrity pin promotion and expiry-safe garbage collection;

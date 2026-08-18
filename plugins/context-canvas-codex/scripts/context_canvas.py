@@ -110,7 +110,9 @@ SNAPSHOT_EVENT_RE = re.compile(r"^obs-[0-9a-f]{64}$")
 SNAPSHOT_URI_RE = re.compile(r"^snapshot://sha256/([0-9a-f]{64})$")
 REFERENCE_ID_RE = re.compile(r"^ref-[0-9a-f]{64}$")
 SNAPSHOT_SCHEMA = "context-canvas-codex.snapshot-event.v1"
-SNAPSHOT_OBJECT_SCHEMA = "context-canvas-codex.snapshot-payload.v1"
+LEGACY_SNAPSHOT_OBJECT_SCHEMA = "context-canvas-codex.snapshot-payload.v1"
+SNAPSHOT_OBJECT_SCHEMA = "context-canvas-codex.snapshot-payload.v2"
+SNAPSHOT_BLOB_SLOT_KEY = "$snapshot_blob_slot"
 SNAPSHOT_PIN_SCHEMA = "context-canvas-codex.snapshot-pin.v1"
 SNAPSHOT_GC_SCHEMA = "context-canvas-codex.snapshot-gc-plan.v1"
 REFERENCE_SCHEMA = "context-canvas-codex.reference.v1"
@@ -123,6 +125,8 @@ CAPTURE_REQUEST_SCHEMA = "context-canvas-codex.capture-request.v1"
 BOOTSTRAP_LOCK_NAME = ".context-canvas-codex.bootstrap.lock"
 SNAPSHOT_CONTENT_POLICIES = frozenset({"text-redacted", "opaque-uninspected"})
 SNAPSHOT_CAPTURE_STATUSES = frozenset({"stored", "metadata_only"})
+SNAPSHOT_CAPTURE_VERSION = 3
+SUPPORTED_SNAPSHOT_CAPTURE_VERSIONS = frozenset({2, SNAPSHOT_CAPTURE_VERSION})
 SNAPSHOT_TEXTUAL_MEDIA_TYPES = frozenset(
     {
         "application/javascript",
@@ -576,10 +580,13 @@ def _sanitize_snapshot_blob(media_type: str, binary: bytes) -> tuple[bytes, str,
     return redacted.encode("utf-8"), "text-redacted", redactions
 
 
-def _sanitize_snapshot_payload(value: Any) -> tuple[Any, int, dict[str, dict[str, Any]]]:
+def _sanitize_snapshot_payload(
+    value: Any,
+) -> tuple[Any, int, dict[str, dict[str, Any]], list[dict[str, Any]]]:
     blobs: dict[str, dict[str, Any]] = {}
+    references: list[dict[str, Any]] = []
 
-    def sanitize(item: Any) -> tuple[Any, int]:
+    def sanitize(item: Any, path: tuple[str | int, ...]) -> tuple[Any, int]:
         if item is None or isinstance(item, bool) or isinstance(item, int):
             return item, 0
         if isinstance(item, float):
@@ -606,20 +613,24 @@ def _sanitize_snapshot_payload(value: Any) -> tuple[Any, int, dict[str, dict[str
                     "bytes": binary,
                     "content_policy": content_policy,
                 }
-                return {
-                    "$snapshot_blob": {
+                references.append(
+                    {
+                        "path": list(path),
                         "sha256": digest,
                         "media_type": media_type,
                         "byte_length": len(binary),
                         "content_policy": content_policy,
                     }
+                )
+                return {
+                    SNAPSHOT_BLOB_SLOT_KEY: digest,
                 }, blob_redactions + header_redactions
             return _redact_snapshot_text(item)
         if isinstance(item, list):
             output: list[Any] = []
             redactions = 0
-            for child in item:
-                sanitized, count = sanitize(child)
+            for index, child in enumerate(item):
+                sanitized, count = sanitize(child, (*path, index))
                 output.append(sanitized)
                 redactions += count
             return output, redactions
@@ -633,18 +644,154 @@ def _sanitize_snapshot_payload(value: Any) -> tuple[Any, int, dict[str, dict[str
                     output_dict[key] = "[REDACTED]"
                     redactions += 1
                 else:
-                    sanitized, count = sanitize(child)
+                    sanitized, count = sanitize(child, (*path, key))
                     output_dict[key] = sanitized
                     redactions += count
             return output_dict, redactions
         raise CanvasError("snapshot payload contains a non-JSON value")
 
-    sanitized, redaction_count = sanitize(value)
-    return sanitized, redaction_count, blobs
+    sanitized, redaction_count = sanitize(value, ())
+    references.sort(
+        key=lambda item: json.dumps(
+            item["path"], ensure_ascii=False, separators=(",", ":"), allow_nan=False
+        )
+    )
+    return sanitized, redaction_count, blobs, references
+
+
+def _snapshot_path_value(value: Any, path: tuple[str | int, ...]) -> Any:
+    current = value
+    for component in path:
+        if isinstance(component, str):
+            if not isinstance(current, dict) or component not in current:
+                raise CorruptCanvasError("snapshot blob reference path is invalid")
+            current = current[component]
+        else:
+            if (
+                not isinstance(component, int)
+                or isinstance(component, bool)
+                or component < 0
+                or not isinstance(current, list)
+                or component >= len(current)
+            ):
+                raise CorruptCanvasError("snapshot blob reference path is invalid")
+            current = current[component]
+    return current
+
+
+def _snapshot_v2_blob_metadata(
+    value: Any,
+) -> tuple[
+    dict[tuple[str | int, ...], dict[str, Any]],
+    dict[str, dict[str, Any]],
+]:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"schema", "tool_input", "tool_response", "blob_references"}
+        or value.get("schema") != SNAPSHOT_OBJECT_SCHEMA
+        or not isinstance(value.get("blob_references"), list)
+    ):
+        raise CorruptCanvasError("snapshot v2 payload shape is invalid")
+    by_path: dict[tuple[str | int, ...], dict[str, Any]] = {}
+    by_digest: dict[str, dict[str, Any]] = {}
+    for reference in value["blob_references"]:
+        if not isinstance(reference, dict) or set(reference) != {
+            "path",
+            "sha256",
+            "media_type",
+            "byte_length",
+            "content_policy",
+        }:
+            raise CorruptCanvasError("snapshot blob reference shape is invalid")
+        raw_path = reference["path"]
+        if (
+            not isinstance(raw_path, list)
+            or not raw_path
+            or raw_path[0] not in {"tool_input", "tool_response"}
+            or any(
+                not isinstance(component, (str, int))
+                or isinstance(component, bool)
+                or (isinstance(component, int) and component < 0)
+                for component in raw_path
+            )
+        ):
+            raise CorruptCanvasError("snapshot blob reference path is invalid")
+        path = tuple(raw_path)
+        if path in by_path:
+            raise CorruptCanvasError("snapshot blob reference path is duplicated")
+        try:
+            digest = _validated_sha256(reference["sha256"])
+            media_type = _validated_snapshot_media_type(reference["media_type"])
+        except CanvasError as exc:
+            raise CorruptCanvasError("snapshot blob reference identity is invalid") from exc
+        descriptor = {
+            "sha256": digest,
+            "media_type": media_type,
+            "byte_length": reference["byte_length"],
+            "content_policy": reference["content_policy"],
+        }
+        if (
+            digest != reference["sha256"]
+            or media_type != reference["media_type"]
+            or not isinstance(descriptor["byte_length"], int)
+            or isinstance(descriptor["byte_length"], bool)
+            or descriptor["byte_length"] < 0
+            or descriptor["content_policy"] not in SNAPSHOT_CONTENT_POLICIES
+        ):
+            raise CorruptCanvasError("snapshot blob reference metadata is invalid")
+        if _snapshot_path_value(value, path) != {SNAPSHOT_BLOB_SLOT_KEY: digest}:
+            raise CorruptCanvasError("snapshot blob reference slot is invalid")
+        existing = by_digest.get(digest)
+        if existing is not None and existing != descriptor:
+            raise CorruptCanvasError("snapshot blob descriptor identity conflict")
+        by_path[path] = descriptor
+        by_digest[digest] = descriptor
+    return by_path, by_digest
 
 
 def _rehydrate_snapshot_payload(value: Any, blob_reader: Callable[[str], bytes]) -> Any:
-    def rehydrate(item: Any) -> Any:
+    if isinstance(value, dict) and value.get("schema") == SNAPSHOT_OBJECT_SCHEMA:
+        references, _ = _snapshot_v2_blob_metadata(value)
+
+        def rehydrate_v2(item: Any, path: tuple[str | int, ...]) -> Any:
+            descriptor = references.get(path)
+            if descriptor is not None:
+                binary = blob_reader(descriptor["sha256"])
+                if not isinstance(binary, bytes):
+                    raise CanvasError("snapshot blob reader returned invalid data")
+                if (
+                    len(binary) != descriptor["byte_length"]
+                    or hashlib.sha256(binary).hexdigest() != descriptor["sha256"]
+                ):
+                    raise CanvasError("snapshot blob failed integrity verification")
+                return (
+                    f"data:{descriptor['media_type']};base64,"
+                    + base64.b64encode(binary).decode("ascii")
+                )
+            if item is None or isinstance(item, (bool, int, str)):
+                return item
+            if isinstance(item, float):
+                if not math.isfinite(item):
+                    raise CanvasError("snapshot payload contains a non-finite number")
+                return item
+            if isinstance(item, list):
+                return [
+                    rehydrate_v2(child, (*path, index))
+                    for index, child in enumerate(item)
+                ]
+            if isinstance(item, dict):
+                if not all(isinstance(key, str) for key in item):
+                    raise CanvasError("snapshot payload object keys must be text")
+                return {
+                    key: rehydrate_v2(child, (*path, key))
+                    for key, child in item.items()
+                    if path or key != "blob_references"
+                }
+            raise CanvasError("snapshot payload contains a non-JSON value")
+
+        return rehydrate_v2(value, ())
+
+    def rehydrate_legacy(item: Any) -> Any:
         if item is None or isinstance(item, (bool, int, str)):
             return item
         if isinstance(item, float):
@@ -652,42 +799,18 @@ def _rehydrate_snapshot_payload(value: Any, blob_reader: Callable[[str], bytes])
                 raise CanvasError("snapshot payload contains a non-finite number")
             return item
         if isinstance(item, list):
-            return [rehydrate(child) for child in item]
+            return [rehydrate_legacy(child) for child in item]
         if isinstance(item, dict):
             if set(item) == {"$snapshot_blob"}:
-                reference = item["$snapshot_blob"]
-                if not isinstance(reference, dict) or set(reference) != {
-                    "sha256",
-                    "media_type",
-                    "byte_length",
-                    "content_policy",
-                }:
-                    raise CanvasError("snapshot blob reference shape is invalid")
-                digest = _validated_sha256(reference["sha256"])
-                media_type = reference["media_type"]
-                byte_length = reference["byte_length"]
-                content_policy = reference["content_policy"]
-                if (
-                    digest != reference["sha256"]
-                    or _validated_snapshot_media_type(media_type) != media_type
-                    or not isinstance(byte_length, int)
-                    or isinstance(byte_length, bool)
-                    or byte_length < 0
-                    or content_policy not in SNAPSHOT_CONTENT_POLICIES
-                ):
-                    raise CanvasError("snapshot blob reference metadata is invalid")
-                binary = blob_reader(digest)
-                if not isinstance(binary, bytes):
-                    raise CanvasError("snapshot blob reader returned invalid data")
-                if len(binary) != byte_length or hashlib.sha256(binary).hexdigest() != digest:
-                    raise CanvasError("snapshot blob failed integrity verification")
-                return f"data:{media_type};base64," + base64.b64encode(binary).decode("ascii")
+                raise CorruptCanvasError(
+                    "legacy snapshot blob provenance is ambiguous and cannot be rehydrated safely"
+                )
             if not all(isinstance(key, str) for key in item):
                 raise CanvasError("snapshot payload object keys must be text")
-            return {key: rehydrate(child) for key, child in item.items()}
+            return {key: rehydrate_legacy(child) for key, child in item.items()}
         raise CanvasError("snapshot payload contains a non-JSON value")
 
-    return rehydrate(value)
+    return rehydrate_legacy(value)
 
 
 def _canonical_snapshot_bytes(value: Any) -> bytes:
@@ -2257,12 +2380,13 @@ class ReferenceStore:
 
     def _entry_paths_unlocked(
         self, reference_root: Path, canvas_id: str
-    ) -> list[Path]:
+    ) -> tuple[list[Path], list[str]]:
         directory = self._canvas_directory(reference_root, canvas_id, create=False)
         if directory is None:
-            return []
+            return [], []
         entries = sorted(directory.iterdir(), key=lambda path: path.name)
-        manifests: list[Path] = []
+        manifests: dict[str, Path] = {}
+        content_ids: set[str] = set()
         for path in entries:
             name = path.name
             if name.endswith(".json"):
@@ -2272,7 +2396,7 @@ class ReferenceStore:
                         "reference directory contains an unknown manifest"
                     )
                 _require_plain_regular_file(path)
-                manifests.append(path)
+                manifests[reference_id] = path
             elif name.endswith(".txt.gz"):
                 reference_id = name[:-7]
                 if not REFERENCE_ID_RE.fullmatch(reference_id):
@@ -2280,11 +2404,15 @@ class ReferenceStore:
                         "reference directory contains an unknown content object"
                     )
                 _require_plain_regular_file(path)
+                content_ids.add(reference_id)
             else:
                 raise CorruptCanvasError("reference directory contains an unknown entry")
-        if len(manifests) > MAX_REFERENCES_PER_CANVAS:
+        all_ids = set(manifests) | content_ids
+        if len(all_ids) > MAX_REFERENCES_PER_CANVAS:
             raise CanvasError("reference listing exceeds its per-canvas limit")
-        return manifests
+        complete_ids = sorted(set(manifests) & content_ids)
+        incomplete_ids = sorted(set(manifests) ^ content_ids)
+        return [manifests[reference_id] for reference_id in complete_ids], incomplete_ids
 
     def put(
         self,
@@ -2345,24 +2473,69 @@ class ReferenceStore:
             assert entry_path is not None and content_path is not None
             entry_exists = _lexists(entry_path)
             content_exists = _lexists(content_path)
-            if entry_exists or content_exists:
-                if not entry_exists or not content_exists:
-                    raise CorruptCanvasError("reference entry is incomplete")
+            if entry_exists and content_exists:
                 existing = self._load_manifest_unlocked(
                     entry_path,
                     expected_canvas_id=canvas_id,
                     expected_reference_id=reference_id,
                 )
                 existing_raw = self._read_content_unlocked(reference_root, existing)
-                if existing_raw != raw:
+                expected_existing = dict(manifest)
+                expected_existing["created_at"] = existing["created_at"]
+                if existing != expected_existing or existing_raw != raw:
                     raise CorruptCanvasError("reference identity collision")
                 result = dict(existing)
                 result.update({"ok": True, "created": False})
                 return result
-            if (
-                len(self._entry_paths_unlocked(reference_root, canvas_id))
-                >= MAX_REFERENCES_PER_CANVAS
-            ):
+            if content_exists:
+                existing_raw = _read_gzip_bounded(
+                    content_path,
+                    maximum_bytes=MAX_REFERENCE_OBJECT_BYTES,
+                    label="reference content",
+                )
+                try:
+                    existing_raw.decode("utf-8")
+                except UnicodeError as exc:
+                    raise CorruptCanvasError(
+                        "incomplete reference content is not valid UTF-8"
+                    ) from exc
+                if existing_raw != raw or hashlib.sha256(existing_raw).hexdigest() != digest:
+                    raise CorruptCanvasError(
+                        "incomplete reference content does not match the deterministic retry"
+                    )
+                _atomic_write_json(
+                    entry_path,
+                    manifest,
+                    maximum_bytes=MAX_REFERENCE_MANIFEST_BYTES,
+                )
+                result = dict(manifest)
+                result.update({"ok": True, "created": True})
+                return result
+            if entry_exists:
+                existing = self._load_manifest_unlocked(
+                    entry_path,
+                    expected_canvas_id=canvas_id,
+                    expected_reference_id=reference_id,
+                )
+                expected_existing = dict(manifest)
+                expected_existing["created_at"] = existing["created_at"]
+                if existing != expected_existing:
+                    raise CorruptCanvasError(
+                        "incomplete reference manifest does not match the deterministic retry"
+                    )
+                compressed = gzip.compress(raw, compresslevel=6, mtime=0)
+                _atomic_write_bytes(
+                    content_path,
+                    compressed,
+                    maximum_bytes=MAX_REFERENCE_OBJECT_BYTES,
+                )
+                result = dict(existing)
+                result.update({"ok": True, "created": True})
+                return result
+            complete_paths, incomplete_ids = self._entry_paths_unlocked(
+                reference_root, canvas_id
+            )
+            if len(complete_paths) + len(incomplete_ids) >= MAX_REFERENCES_PER_CANVAS:
                 raise CanvasError("reference store reached its per-canvas limit")
             compressed = gzip.compress(raw, compresslevel=6, mtime=0)
             _atomic_write_bytes(
@@ -2449,8 +2622,14 @@ class ReferenceStore:
                     "skipped_count": 0,
                 }
             manifests: list[dict[str, Any]] = []
-            skipped: list[dict[str, str]] = []
-            for path in self._entry_paths_unlocked(reference_root, canvas_id):
+            paths, incomplete_ids = self._entry_paths_unlocked(
+                reference_root, canvas_id
+            )
+            skipped: list[dict[str, str]] = [
+                {"reference_id": reference_id, "reason": "incomplete_pair"}
+                for reference_id in incomplete_ids
+            ]
+            for path in paths:
                 try:
                     manifest = self._load_manifest_unlocked(
                         path,
@@ -2757,7 +2936,7 @@ class CaptureRequestStore:
             raise CorruptCanvasError("capture request validation failed") from exc
         if canvas_id != expected_canvas_id:
             raise CorruptCanvasError("capture request identity does not match its path")
-        if tool_name == "":
+        if tool_name in {"", "*"}:
             raise CorruptCanvasError("capture request tool name is invalid")
         ttl = expires_at - armed_at
         if not timedelta(minutes=1) <= ttl <= timedelta(
@@ -2777,15 +2956,15 @@ class CaptureRequestStore:
         self,
         canvas_id: str,
         *,
-        tool_name: str | None = None,
+        tool_name: str,
         retention_days: int = DEFAULT_SNAPSHOT_RETENTION_DAYS,
         ttl_minutes: int = DEFAULT_CAPTURE_REQUEST_TTL_MINUTES,
         now: datetime | None = None,
     ) -> dict[str, Any]:
         canvas_id = _validated_canvas_id(canvas_id)
-        expected_tool = "*" if tool_name is None else _validated_text(
-            "capture request tool_name", tool_name, 512
-        )
+        expected_tool = _validated_text("capture request tool_name", tool_name, 512)
+        if expected_tool == "*":
+            raise CanvasError("capture request tool_name must identify one exact tool")
         if (
             not isinstance(retention_days, int)
             or isinstance(retention_days, bool)
@@ -2881,7 +3060,7 @@ class CaptureRequestStore:
             if current >= _parse_snapshot_iso(request["expires_at"]):
                 path.unlink()
                 return {"capture": False, "reason": "expired"}
-            if request["tool_name"] not in {"*", tool_name}:
+            if request["tool_name"] != tool_name:
                 return {"capture": False, "reason": "tool_mismatch"}
             path.unlink()
             return {
@@ -3112,11 +3291,18 @@ class SnapshotStore:
             payload = json.loads(raw.decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError) as exc:
             raise CorruptCanvasError("snapshot object is not valid JSON") from exc
-        if (
-            not isinstance(payload, dict)
-            or set(payload) != {"schema", "tool_input", "tool_response"}
-            or payload.get("schema") != SNAPSHOT_OBJECT_SCHEMA
-        ):
+        valid_v2 = (
+            isinstance(payload, dict)
+            and set(payload)
+            == {"schema", "tool_input", "tool_response", "blob_references"}
+            and payload.get("schema") == SNAPSHOT_OBJECT_SCHEMA
+        )
+        valid_v1 = (
+            isinstance(payload, dict)
+            and set(payload) == {"schema", "tool_input", "tool_response"}
+            and payload.get("schema") == LEGACY_SNAPSHOT_OBJECT_SCHEMA
+        )
+        if not valid_v2 and not valid_v1:
             raise CorruptCanvasError("snapshot object schema is invalid")
         if _canonical_snapshot_bytes(payload) != raw:
             raise CorruptCanvasError("snapshot object is not canonical JSON")
@@ -3250,7 +3436,7 @@ class SnapshotStore:
         if status not in {"stored", "metadata_only"}:
             raise CorruptCanvasError("snapshot capture status is invalid")
         if (
-            payload.get("capture_version") != 2
+            payload.get("capture_version") not in SUPPORTED_SNAPSHOT_CAPTURE_VERSIONS
             or payload.get("hook_event_name") != "PostToolUse"
             or payload.get("tool_status") not in {"captured", "succeeded", "failed"}
             or not isinstance(payload.get("error_observed"), bool)
@@ -3485,7 +3671,7 @@ class SnapshotStore:
         )
         manifest: dict[str, Any] = {
             "schema": SNAPSHOT_SCHEMA,
-            "capture_version": 2,
+            "capture_version": SNAPSHOT_CAPTURE_VERSION,
             "event_id": event_id,
             "canvas_id": canvas_id,
             "session_id_sha256": hashlib.sha256(session_id.encode("utf-8")).hexdigest(),
@@ -3551,13 +3737,14 @@ class SnapshotStore:
                     "deduplicated": existed,
                 }
 
-            object_payload, redaction_count, blobs = _sanitize_snapshot_payload(
+            object_payload, redaction_count, blobs, blob_references = _sanitize_snapshot_payload(
                 {
                     "schema": SNAPSHOT_OBJECT_SCHEMA,
                     "tool_input": hook_input["tool_input"],
                     "tool_response": hook_input["tool_response"],
                 }
             )
+            object_payload["blob_references"] = blob_references
             expected_descriptors = {
                 blob_digest: {
                     "sha256": blob_digest,
@@ -3911,6 +4098,9 @@ class SnapshotStore:
 
     @staticmethod
     def _blob_descriptors(value: Any) -> dict[str, dict[str, Any]]:
+        if isinstance(value, dict) and value.get("schema") == SNAPSHOT_OBJECT_SCHEMA:
+            _, descriptors = _snapshot_v2_blob_metadata(value)
+            return descriptors
         result: dict[str, dict[str, Any]] = {}
         if isinstance(value, list):
             for item in value:

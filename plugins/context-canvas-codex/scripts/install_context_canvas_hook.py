@@ -40,6 +40,11 @@ MANAGED_MARKERS = {
     "UserPromptSubmit": TURN_STATUS_MESSAGE,
     "PostToolUse": SNAPSHOT_STATUS_MESSAGE,
 }
+PRIOR_V04_MANAGED_MARKERS = {
+    "SessionStart": "Restoring Context Canvas [context-canvas-codex user hook]",
+    "UserPromptSubmit": "Refreshing Context Canvas identity [context-canvas-codex user hook]",
+    "PostToolUse": "Archiving tool snapshot [context-canvas-codex user hook]",
+}
 MAX_JSON_BYTES = 1024 * 1024
 
 
@@ -149,7 +154,11 @@ def _powershell_quote(path: Path) -> str:
     return "'" + os.fspath(path).replace("'", "''") + "'"
 
 
-def _expected_groups(installed_script: Path) -> dict[str, dict[str, Any]]:
+def _expected_groups(
+    installed_script: Path,
+    *,
+    markers: dict[str, str] = MANAGED_MARKERS,
+) -> dict[str, dict[str, Any]]:
     return {
         "SessionStart": {
             "matcher": SESSION_MATCHER,
@@ -163,7 +172,7 @@ def _expected_groups(installed_script: Path) -> dict[str, dict[str, Any]]:
                         f"python -I {_powershell_quote(installed_script)} hook-session-start"
                     ),
                     "timeout": 10,
-                    "statusMessage": SESSION_STATUS_MESSAGE,
+                    "statusMessage": markers["SessionStart"],
                     "additionalContextLimit": 5000,
                 }
             ],
@@ -181,7 +190,7 @@ def _expected_groups(installed_script: Path) -> dict[str, dict[str, Any]]:
                         "hook-user-prompt-submit"
                     ),
                     "timeout": 10,
-                    "statusMessage": TURN_STATUS_MESSAGE,
+                    "statusMessage": markers["UserPromptSubmit"],
                     "additionalContextLimit": 1000,
                 }
             ],
@@ -198,7 +207,7 @@ def _expected_groups(installed_script: Path) -> dict[str, dict[str, Any]]:
                         f"python -I {_powershell_quote(installed_script)} hook-post-tool-use"
                     ),
                     "timeout": 30,
-                    "statusMessage": SNAPSHOT_STATUS_MESSAGE,
+                    "statusMessage": markers["PostToolUse"],
                 }
             ],
         },
@@ -229,12 +238,19 @@ def _hooks_document(path: Path) -> dict[str, Any]:
 
 
 def _managed_group_index(
-    groups: list[Any], expected: dict[str, Any], *, marker: str
+    groups: list[Any],
+    expected: dict[str, Any],
+    *,
+    marker: str,
+    alternate_expected: tuple[dict[str, Any], ...] = (),
+    alternate_markers: tuple[str, ...] = (),
 ) -> int | None:
     matches: list[int] = []
     marker_matches: list[int] = []
+    allowed_groups = (expected, *alternate_expected)
+    recognized_markers = {marker, *alternate_markers}
     for index, group in enumerate(groups):
-        if group == expected:
+        if any(group == candidate for candidate in allowed_groups):
             matches.append(index)
         if not isinstance(group, dict):
             continue
@@ -242,15 +258,48 @@ def _managed_group_index(
         if not isinstance(handlers, list):
             continue
         if any(
-            isinstance(handler, dict) and handler.get("statusMessage") == marker
+            isinstance(handler, dict)
+            and handler.get("statusMessage") in recognized_markers
             for handler in handlers
         ):
             marker_matches.append(index)
     if len(matches) > 1 or len(marker_matches) > 1:
         raise InstallerError("duplicate Context Canvas user-hook handlers were found")
     if marker_matches and not matches:
-        raise InstallerError("Context Canvas user-hook marker exists with a drifted definition")
+        raise InstallerError(
+            "Context Canvas user-hook marker exists with a drifted or unowned definition"
+        )
     return matches[0] if matches else None
+
+
+def _handler_hashes(groups: dict[str, dict[str, Any]]) -> dict[str, str]:
+    return {
+        event_name: _sha256_bytes(_json_bytes(group))
+        for event_name, group in sorted(groups.items())
+    }
+
+
+def _manifest_generation(
+    manifest: dict[str, Any] | None,
+    *,
+    current_groups: dict[str, dict[str, Any]],
+    prior_groups: dict[str, dict[str, Any]],
+) -> str:
+    if manifest is None:
+        return "none"
+    if manifest["schema"] == SCHEMA:
+        handler_hashes = manifest["handlers_sha256"]
+        if handler_hashes == _handler_hashes(current_groups):
+            return "current"
+        if (
+            handler_hashes == _handler_hashes(prior_groups)
+            and manifest["source_sha256"] == manifest["installed_sha256"]
+        ):
+            return "prior-v04"
+        raise InstallerError(
+            "Context Canvas v3 manifest does not identify a supported managed hook definition"
+        )
+    return "legacy"
 
 
 def _manifest_payload(
@@ -331,6 +380,9 @@ def _state(codex_home: Path) -> dict[str, Any]:
     source = _regular_file_bytes(SOURCE_SCRIPT, "Context Canvas source script")
     source_hash = _sha256_bytes(source)
     expected = _expected_groups(installed_script)
+    prior_v04_expected = _expected_groups(
+        installed_script, markers=PRIOR_V04_MANAGED_MARKERS
+    )
     return {
         "install_dir": install_dir,
         "installed_script": installed_script,
@@ -339,6 +391,7 @@ def _state(codex_home: Path) -> dict[str, Any]:
         "source": source,
         "source_hash": source_hash,
         "expected": expected,
+        "prior_v04_expected": prior_v04_expected,
     }
 
 
@@ -349,6 +402,12 @@ def check(codex_home: Path) -> dict[str, Any]:
         manifest = _load_owned_manifest(state["manifest_path"])
         if manifest is None:
             errors.append("install manifest is missing")
+        elif _manifest_generation(
+            manifest,
+            current_groups=state["expected"],
+            prior_groups=state["prior_v04_expected"],
+        ) != "current":
+            errors.append("install manifest does not describe the current managed hooks")
         installed = _regular_file_bytes(
             state["installed_script"], "installed Context Canvas hook script"
         )
@@ -358,7 +417,10 @@ def check(codex_home: Path) -> dict[str, Any]:
         for event_name, expected_group in state["expected"].items():
             groups = hooks["hooks"][event_name]
             if _managed_group_index(
-                groups, expected_group, marker=MANAGED_MARKERS[event_name]
+                groups,
+                expected_group,
+                marker=MANAGED_MARKERS[event_name],
+                alternate_markers=(PRIOR_V04_MANAGED_MARKERS[event_name],),
             ) is None:
                 errors.append(f"Context Canvas {event_name} user-hook handler is missing")
         if manifest is not None and manifest != _manifest_payload(
@@ -391,19 +453,37 @@ def install(codex_home: Path) -> dict[str, Any]:
         if interrupted_hash != state["source_hash"]:
             raise InstallerError("refusing to overwrite a foreign Context Canvas hook script")
 
-    group_indexes = {
-        event_name: _managed_group_index(
-            hooks["hooks"][event_name],
-            expected_group,
-            marker=MANAGED_MARKERS[event_name],
-        )
-        for event_name, expected_group in state["expected"].items()
-    }
     installed_hash = None
     if _lexists(state["installed_script"]):
         installed_hash = _sha256_bytes(
             _regular_file_bytes(state["installed_script"], "installed Context Canvas hook script")
         )
+    generation = _manifest_generation(
+        manifest,
+        current_groups=state["expected"],
+        prior_groups=state["prior_v04_expected"],
+    )
+    if (
+        generation == "prior-v04"
+        and installed_hash is not None
+        and installed_hash
+        not in {manifest["installed_sha256"], state["source_hash"]}
+    ):
+        raise InstallerError(
+            "Context Canvas installed script digest does not match the owned or current file"
+        )
+    group_indexes = {
+        event_name: _managed_group_index(
+            hooks["hooks"][event_name],
+            expected_group,
+            marker=MANAGED_MARKERS[event_name],
+            alternate_expected=(state["prior_v04_expected"][event_name],)
+            if generation == "prior-v04"
+            else (),
+            alternate_markers=(PRIOR_V04_MANAGED_MARKERS[event_name],),
+        )
+        for event_name, expected_group in state["expected"].items()
+    }
     if manifest is not None and manifest["schema"] == LEGACY_SCHEMA:
         expected_legacy_handler_hash = _sha256_bytes(
             _json_bytes(state["expected"]["SessionStart"])
@@ -420,6 +500,11 @@ def install(codex_home: Path) -> dict[str, Any]:
     changed = (
         installed_hash != state["source_hash"]
         or any(index is None for index in group_indexes.values())
+        or any(
+            index is not None
+            and hooks["hooks"][event_name][index] != state["expected"][event_name]
+            for event_name, index in group_indexes.items()
+        )
         or manifest != expected_manifest
     )
     backup = None
@@ -429,6 +514,8 @@ def install(codex_home: Path) -> dict[str, Any]:
         for event_name, expected_group in state["expected"].items():
             if group_indexes[event_name] is None:
                 hooks["hooks"][event_name].append(expected_group)
+            elif hooks["hooks"][event_name][group_indexes[event_name]] != expected_group:
+                hooks["hooks"][event_name][group_indexes[event_name]] = expected_group
         _atomic_write(state["hooks_path"], _json_bytes(hooks))
         _atomic_write(state["manifest_path"], _json_bytes(expected_manifest))
 
@@ -465,11 +552,20 @@ def uninstall(codex_home: Path) -> dict[str, Any]:
     state = _state(codex_home)
     manifest = _load_owned_manifest(state["manifest_path"])
     hooks = _hooks_document(state["hooks_path"])
+    generation = _manifest_generation(
+        manifest,
+        current_groups=state["expected"],
+        prior_groups=state["prior_v04_expected"],
+    )
     group_indexes = {
         event_name: _managed_group_index(
             hooks["hooks"][event_name],
             expected_group,
             marker=MANAGED_MARKERS[event_name],
+            alternate_expected=(state["prior_v04_expected"][event_name],)
+            if generation == "prior-v04"
+            else (),
+            alternate_markers=(PRIOR_V04_MANAGED_MARKERS[event_name],),
         )
         for event_name, expected_group in state["expected"].items()
     }

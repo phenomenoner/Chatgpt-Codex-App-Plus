@@ -266,6 +266,72 @@ class ContextCanvasTests(unittest.TestCase):
         with self.assertRaisesRegex(canvas.CanvasError, "not found"):
             references.read(self.canvas_id, stored["reference_id"])
 
+    def test_reference_put_recovers_verified_body_only_interruption(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        original_write_json = canvas._atomic_write_json
+
+        def interrupt_manifest(path: Path, payload: object, *, maximum_bytes: int) -> None:
+            if path.name.startswith("ref-") and path.suffix == ".json":
+                raise KeyboardInterrupt("simulated stop after body commit")
+            original_write_json(path, payload, maximum_bytes=maximum_bytes)
+
+        with mock.patch.object(canvas, "_atomic_write_json", side_effect=interrupt_manifest):
+            with self.assertRaisesRegex(KeyboardInterrupt, "simulated stop"):
+                references.put(
+                    self.canvas_id,
+                    summary="Interrupted reference",
+                    content="recoverable body NEEDLE",
+                    source="test:interrupted-put",
+                )
+
+        search_before_retry = references.search(self.canvas_id, "needle")
+        self.assertEqual(search_before_retry["hits"], [])
+        self.assertEqual(search_before_retry["skipped_count"], 1)
+        self.assertEqual(search_before_retry["skipped"][0]["reason"], "incomplete_pair")
+
+        recovered = references.put(
+            self.canvas_id,
+            summary="Interrupted reference",
+            content="recoverable body NEEDLE",
+            source="test:interrupted-put",
+        )
+        self.assertTrue(recovered["created"])
+        self.assertEqual(
+            references.read(self.canvas_id, recovered["reference_id"])["chunk"],
+            "recoverable body NEEDLE",
+        )
+        self.assertEqual(references.search(self.canvas_id, "needle")["skipped_count"], 0)
+
+        with references._locked(create=False) as reference_root:
+            assert reference_root is not None
+            manifest_path = references._entry_path(
+                reference_root,
+                self.canvas_id,
+                recovered["reference_id"],
+                create=False,
+            )
+            body_path = references._content_path(
+                reference_root,
+                self.canvas_id,
+                recovered["reference_id"],
+                create=False,
+            )
+            assert manifest_path is not None and body_path is not None
+            manifest_path.unlink()
+            body_path.write_bytes(canvas.gzip.compress(b"foreign body", mtime=0))
+            unproven_bytes = body_path.read_bytes()
+        with self.assertRaisesRegex(
+            canvas.CorruptCanvasError, "does not match the deterministic retry"
+        ):
+            references.put(
+                self.canvas_id,
+                summary="Interrupted reference",
+                content="recoverable body NEEDLE",
+                source="test:interrupted-put",
+            )
+        self.assertEqual(body_path.read_bytes(), unproven_bytes)
+        self.assertEqual(references.search(self.canvas_id, "needle")["skipped_count"], 1)
+
     def test_reference_search_returns_digest_bound_unicode_byte_ranges(self) -> None:
         references = canvas.ReferenceStore(root=self.root)
         fixtures = (
@@ -1286,6 +1352,102 @@ class ContextCanvasTests(unittest.TestCase):
             1,
         )
 
+        prior_v04_home = self.base / "prior-v04-codex-home"
+        run("install", home=prior_v04_home)
+        prior_v04_hooks_path = prior_v04_home / "hooks.json"
+        prior_v04_hooks = json.loads(prior_v04_hooks_path.read_text(encoding="utf-8"))
+        prior_markers = {
+            "SessionStart": "Restoring Context Canvas [context-canvas-codex user hook]",
+            "UserPromptSubmit": "Refreshing Context Canvas identity [context-canvas-codex user hook]",
+            "PostToolUse": "Archiving tool snapshot [context-canvas-codex user hook]",
+        }
+        for event_name, status_message in prior_markers.items():
+            prior_v04_hooks["hooks"][event_name][0]["hooks"][0][
+                "statusMessage"
+            ] = status_message
+        peer_group = {
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python peer-hook.py",
+                    "statusMessage": "Unrelated peer",
+                }
+            ]
+        }
+        prior_v04_hooks["hooks"]["UserPromptSubmit"].insert(0, peer_group)
+        prior_v04_hooks_path.write_text(json.dumps(prior_v04_hooks), encoding="utf-8")
+        prior_v04_manifest_path = (
+            prior_v04_home / "context-canvas-codex" / "hook-install.json"
+        )
+        prior_v04_manifest = json.loads(
+            prior_v04_manifest_path.read_text(encoding="utf-8")
+        )
+        prior_v04_manifest["handlers_sha256"] = {
+            event_name: hashlib.sha256(
+                (
+                    json.dumps(
+                        next(
+                            group
+                            for group in prior_v04_hooks["hooks"][event_name]
+                            if group is not peer_group
+                        ),
+                        ensure_ascii=False,
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n"
+                ).encode("utf-8")
+            ).hexdigest()
+            for event_name in ("SessionStart", "UserPromptSubmit", "PostToolUse")
+        }
+        prior_v04_manifest_path.write_text(
+            json.dumps(prior_v04_manifest), encoding="utf-8"
+        )
+
+        _, upgraded_v04 = run("install", home=prior_v04_home)
+        self.assertTrue(upgraded_v04["changed"])
+        upgraded_v04_hooks = json.loads(
+            prior_v04_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(len(upgraded_v04_hooks["SessionStart"]), 1)
+        self.assertEqual(len(upgraded_v04_hooks["UserPromptSubmit"]), 2)
+        self.assertEqual(upgraded_v04_hooks["UserPromptSubmit"][0], peer_group)
+        self.assertEqual(len(upgraded_v04_hooks["PostToolUse"]), 1)
+        for event_name, status_message in (
+            ("SessionStart", "Restoring optional Context Canvas map [context-canvas-codex user hook]"),
+            ("UserPromptSubmit", "Refreshing optional Canvas binding [context-canvas-codex user hook]"),
+            ("PostToolUse", "Checking explicit Canvas capture request [context-canvas-codex user hook]"),
+        ):
+            owned = [
+                group
+                for group in upgraded_v04_hooks[event_name]
+                if group != peer_group
+            ]
+            self.assertEqual(owned[0]["hooks"][0]["statusMessage"], status_message)
+        run("uninstall", home=prior_v04_home)
+        retired_v04_hooks = json.loads(
+            prior_v04_hooks_path.read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(retired_v04_hooks["SessionStart"], [])
+        self.assertEqual(retired_v04_hooks["UserPromptSubmit"], [peer_group])
+        self.assertEqual(retired_v04_hooks["PostToolUse"], [])
+
+        ambiguous_home = self.base / "ambiguous-owned-hooks-home"
+        run("install", home=ambiguous_home)
+        ambiguous_hooks_path = ambiguous_home / "hooks.json"
+        ambiguous_hooks = json.loads(
+            ambiguous_hooks_path.read_text(encoding="utf-8")
+        )
+        duplicate_prior = json.loads(
+            json.dumps(ambiguous_hooks["hooks"]["SessionStart"][0])
+        )
+        duplicate_prior["hooks"][0]["statusMessage"] = prior_markers["SessionStart"]
+        ambiguous_hooks["hooks"]["SessionStart"].append(duplicate_prior)
+        ambiguous_hooks_path.write_text(json.dumps(ambiguous_hooks), encoding="utf-8")
+        ambiguous_before = ambiguous_hooks_path.read_bytes()
+        run("install", expected=1, home=ambiguous_home)
+        self.assertEqual(ambiguous_hooks_path.read_bytes(), ambiguous_before)
+
         legacy_home = self.base / "legacy-codex-home"
         run("install", home=legacy_home)
         legacy_hooks_path = legacy_home / "hooks.json"
@@ -1773,6 +1935,36 @@ class ContextCanvasTests(unittest.TestCase):
                 }
                 <= names
             )
+            capture_tool = next(
+                item
+                for item in listed["result"]["tools"]
+                if item["name"] == "snapshot_capture_next"
+            )
+            self.assertIn("tool_name", capture_tool["inputSchema"]["required"])
+            self.assertEqual(
+                capture_tool["inputSchema"]["properties"]["tool_name"]["minLength"], 1
+            )
+            for request_id, arguments in (
+                (41, {"canvas_id": self.canvas_id}),
+                (42, {"canvas_id": self.canvas_id, "tool_name": ""}),
+            ):
+                rejected_capture = request(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "snapshot_capture_next",
+                            "arguments": arguments,
+                        },
+                    }
+                )
+                self.assertTrue(rejected_capture["result"]["isError"])
+            self.assertFalse(
+                canvas.CaptureRequestStore(root=self.root).cancel(self.canvas_id)[
+                    "cancelled"
+                ]
+            )
 
             started = request(
                 {
@@ -2058,12 +2250,17 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         data_url = "data:application/octet-stream;base64," + base64.b64encode(binary).decode(
             "ascii"
         )
-        sanitized, redactions, blobs = canvas._sanitize_snapshot_payload(
+        sanitized, redactions, blobs, references = canvas._sanitize_snapshot_payload(
             {
-                "author" + "ization": "Bearer " + sensitive_value,
-                "nested": ["Bearer " + sensitive_value, {"image": data_url}],
+                "schema": canvas.SNAPSHOT_OBJECT_SCHEMA,
+                "tool_input": {
+                    "author" + "ization": "Bearer " + sensitive_value,
+                    "nested": ["Bearer " + sensitive_value, {"image": data_url}],
+                },
+                "tool_response": None,
             }
         )
+        sanitized["blob_references"] = references
         self.assertEqual(redactions, 2)
         self.assertNotIn(sensitive_value, json.dumps(sanitized, ensure_ascii=False))
         self.assertEqual(len(blobs), 1)
@@ -2075,11 +2272,9 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         rehydrated = canvas._rehydrate_snapshot_payload(
             sanitized, lambda requested: blobs[requested]["bytes"]
         )
-        self.assertEqual(rehydrated["nested"][1]["image"], data_url)
+        self.assertEqual(rehydrated["tool_input"]["nested"][1]["image"], data_url)
         uppercase_reference = json.loads(json.dumps(sanitized))
-        uppercase_reference["nested"][1]["image"]["$snapshot_blob"]["sha256"] = (
-            digest.upper()
-        )
+        uppercase_reference["blob_references"][0]["sha256"] = digest.upper()
         with self.assertRaises(canvas.CanvasError):
             canvas._rehydrate_snapshot_payload(
                 uppercase_reference, lambda requested: blobs[requested]["bytes"]
@@ -2089,6 +2284,90 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         first = canvas._canonical_snapshot_bytes(sanitized)
         second = canvas._canonical_snapshot_bytes(dict(reversed(list(sanitized.items()))))
         self.assertEqual(first, second)
+
+    def test_snapshot_blob_provenance_preserves_literal_marker_shaped_json(self) -> None:
+        binary = b"literal-marker-collision"
+        digest = hashlib.sha256(binary).hexdigest()
+        data_url = "data:application/octet-stream;base64," + base64.b64encode(
+            binary
+        ).decode("ascii")
+        literal = {
+            "$snapshot_blob": {
+                "sha256": digest,
+                "media_type": "application/octet-stream",
+                "byte_length": len(binary),
+                "content_policy": "opaque-uninspected",
+            }
+        }
+        captured_at = datetime(2026, 8, 18, tzinfo=timezone.utc)
+        captured = self.snapshots.capture_post_tool_use(
+            self.hook_payload(
+                tool_use_id="call-literal-marker-collision",
+                response={"literal": literal, "attachment": data_url},
+            ),
+            retention_days=1,
+            now=captured_at,
+        )
+
+        event = self.snapshots.read_event(
+            self.canvas_id, captured["event_id"], include_payload=True
+        )
+        self.assertEqual(event["payload"]["tool_response"]["literal"], literal)
+        self.assertEqual(event["payload"]["tool_response"]["attachment"], data_url)
+
+        export_path = self.base / "literal-marker-collision.json"
+        self.snapshots.export_event(
+            self.canvas_id, captured["event_id"], output_path=export_path
+        )
+        exported = json.loads(export_path.read_text(encoding="utf-8"))
+        self.assertEqual(exported["tool_response"]["literal"], literal)
+        self.assertEqual(exported["tool_response"]["attachment"], data_url)
+
+        self.snapshots.pin(
+            captured["sha256"],
+            canvas_id=self.canvas_id,
+            node_id="N000002",
+            reason="literal provenance regression",
+        )
+        gc_result = self.snapshots.gc(
+            now=captured_at + timedelta(days=2), apply=True
+        )
+        self.assertNotIn(digest, gc_result["candidate_blobs"])
+        self.assertEqual(
+            self.snapshots.read_event(
+                self.canvas_id, captured["event_id"], include_payload=True
+            )["payload"]["tool_response"]["literal"],
+            literal,
+        )
+
+    def test_legacy_blob_markers_fail_closed_while_markerless_payloads_remain_readable(self) -> None:
+        markerless = {
+            "schema": canvas.LEGACY_SNAPSHOT_OBJECT_SCHEMA,
+            "tool_input": {"ordinary": "value"},
+            "tool_response": None,
+        }
+        self.assertEqual(
+            canvas._rehydrate_snapshot_payload(markerless, lambda _: b""), markerless
+        )
+
+        legacy_blob = {
+            "schema": canvas.LEGACY_SNAPSHOT_OBJECT_SCHEMA,
+            "tool_input": {
+                "attachment": {
+                    "$snapshot_blob": {
+                        "sha256": "a" * 64,
+                        "media_type": "application/octet-stream",
+                        "byte_length": 1,
+                        "content_policy": "opaque-uninspected",
+                    }
+                }
+            },
+            "tool_response": None,
+        }
+        with self.assertRaisesRegex(
+            canvas.CorruptCanvasError, "provenance is ambiguous"
+        ):
+            canvas._rehydrate_snapshot_payload(legacy_blob, lambda _: b"x")
 
     def test_textual_data_url_is_redacted_before_blob_persistence(self) -> None:
         sensitive_value = "DATA_URL_" + "TOKEN_123456789"
@@ -2400,12 +2679,13 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
 
         for key in ("api%5Fkey", "api%ZZkey", "token[0]", "authorization[1]"):
             with self.subTest(key=key):
-                sanitized, redaction_count, blobs = canvas._sanitize_snapshot_payload(
-                    {key: protected_value}
+                sanitized, redaction_count, blobs, references = (
+                    canvas._sanitize_snapshot_payload({key: protected_value})
                 )
                 self.assertEqual(sanitized[key], "[REDACTED]")
                 self.assertEqual(redaction_count, 1)
                 self.assertEqual(blobs, {})
+                self.assertEqual(references, [])
 
     def test_redacted_mime_parameters_round_trip_and_do_not_poison_gc(self) -> None:
         captured_at = datetime(2026, 1, 1, tzinfo=timezone.utc)

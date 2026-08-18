@@ -110,7 +110,11 @@ bounded amount of reference text inside one Canvas. Content hits return a
 bounded display preview plus a source receipt, exact UTF-8 match byte range,
 and a digest-bound `reference_read` hint; summary-only hits do not read the
 body. Corrupt or scan-budget-skipped entries remain visible through bounded
-reason codes and `skipped_count`.
+reason codes and `skipped_count`. If interruption leaves only one member of a
+deterministic manifest/body pair, an identical retry completes it only after
+verifying the owned regular file, bounded gzip content, digest, and reference
+identity. Otherwise the pair remains visible as `incomplete_pair` and no
+unproven bytes are deleted.
 
 `reference_preview` is a separate explicit read for large logs or strict
 line-oriented search results. `log-v1` and `search-results-v1` return ephemeral
@@ -132,16 +136,25 @@ unobservable to this adapter. These are host transport limits, not Canvas
 workflow rules.
 
 The Canvas hook stores nothing unless a live capture request matches. The
-request has a bounded TTL and retention value, exact tool matching is preferred,
-tool mismatch does not consume it, Canvas self-tools are ignored, and one match
-consumes it under a cross-process lock. The hook emits no model-facing output
-and fails open with respect to the completed tool call.
+request has a bounded TTL and retention value, and every public arming path
+requires a nonempty exact tool name. Omitted, empty, or wildcard scope is
+rejected before mutation; exact mismatch does not consume the request, Canvas
+self-tools are ignored, and one match consumes it under a cross-process lock.
+The hook emits no model-facing output and fails open with respect to the
+completed tool call.
 
 A materialized snapshot contains the complete model-facing `tool_input` and
 `tool_response` after the declared sanitization and opaque-media policy. It is
 never silently truncated: oversize, malformed, or unsupported payloads are
 skipped whole. This is not provider-private wire data or a sealed unredacted
 evidence tier.
+
+V2 snapshot objects separate generated blob provenance from caller JSON with a
+root-level list of exact object paths. Read, export, pin verification, and GC
+rehydrate or retain only those proven paths, so a literal dictionary shaped like
+the retired `$snapshot_blob` marker round-trips unchanged. Markerless V1 objects
+remain readable; V1 blob markers are structurally ambiguous and therefore fail
+closed instead of being guessed.
 
 The existing content-addressed object/blob format, dedupe, 14-day default TTL,
 explicit pins, transitive integrity validation, and dry-run-first journalled GC
@@ -196,6 +209,11 @@ is needed, install it explicitly from the repository root:
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py install
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
+
+The compatibility installer recognizes the exact manifest-bound 0.4
+three-hook definitions as a supported prior generation. It replaces one proven
+prior group per event, preserves unrelated peers, and refuses duplicates,
+ambiguity, or foreign drift; check and uninstall use the same ownership set.
 
 A missing binding means Canvas actions are unavailable, not that the task is
 blocked. To prove capture, open a fresh task, obtain its hook-derived ID, arm one
