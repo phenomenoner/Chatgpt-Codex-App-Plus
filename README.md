@@ -82,9 +82,11 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py ch
 Codex CLI 0.146.0 的先前本機實測是
 plugin MCP/skill 會載入、plugin-bundled hook 卻未執行；這個顯式 installer
 就是相容層。它只接受精確 manifest-bound v1/v2/v3 hook generations 與可證明
-owned 的 adapter bytes，保留既有 hooks 與 hash-addressed backup，並用單一
+owned 的 adapter bytes，保留既有 hooks 與 hash-addressed backup。顯式 install
+可以在備份後接管已完全等同目前定義的 groups；uninstall 則必須先由 canonical
+manifest 或精確的目前 adapter 證明刪除權，只有 group 結構相等並不足夠。單一
 Codex-home-scoped OS lock 序列化 cooperating install/check/uninstall；該 lock
-只是 host coordination metadata，不是 Canvas 狀態或工作 gate。安裝、catalog
+只是 host coordination metadata，不是 ownership 證據、Canvas 狀態或工作 gate。安裝、catalog
 discovery 或 tool call 顯示 `started` 都不等於實際執行完成。
 
 本 repo 不再複製 general-engineering skills。若要安裝仍由這裡維護的選配

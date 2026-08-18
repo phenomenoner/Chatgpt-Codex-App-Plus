@@ -18,7 +18,15 @@ mutation, not an automatic post-install action. It may add only its exact
 and fail closed on foreign or drifted owned files. Exact manifest-bound v1,
 v2, and v3 generations require canonical targets, fields, event sets, coherent
 lowercase digests, and a live adapter matching the manifest or current source.
-It recovers a script-first interruption only when the installed bytes exactly match the current source. Install, check, and uninstall share one stable Codex-home-scoped OS lock across the complete transition; this is host coordination metadata, not Canvas authority or a task gate. A plugin upgrade requires a
+Explicit install may adopt already-exact current groups after backing up the
+hooks document and establishing the current adapter and manifest. Uninstall
+requires a canonical supported manifest or the exact current adapter before
+deleting any existing managed group; structural equality or possession of the
+host lock alone is not deletion authority. It recovers a script-first
+interruption only when the installed bytes exactly match the current source.
+Install, check, and uninstall share one stable Codex-home-scoped OS lock across
+the complete transition; this is host coordination metadata, not Canvas
+authority or a task gate. A plugin upgrade requires a
 new installer `check`; Codex hook trust does not sandbox other software already
 running as the same user.
 

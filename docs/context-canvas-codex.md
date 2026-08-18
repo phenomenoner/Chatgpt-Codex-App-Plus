@@ -217,10 +217,16 @@ exact fields and event sets, coherent lowercase SHA-256 digests, and the live
 adapter digest must all prove ownership before replacement. A third digest,
 duplicate or marker-only handler, ambiguity, or foreign path is refused without
 changing the pre-existing adapter, manifest, hooks, or backup inventory.
+Explicit install may adopt already-exact current groups after preserving the
+hooks document and then establishing the current adapter and manifest. Uninstall
+requires a canonical supported manifest or the exact current adapter before it
+may delete an existing managed group; structural equality alone is not deletion
+authority.
 
 Install, check, and uninstall share one Codex-home-scoped exclusive OS lock for
 the complete compatibility transition. Its stable empty file is host
-coordination metadata, not Canvas state, authorization, or a task gate. An
+coordination metadata, not ownership evidence, Canvas state, authorization, or
+a task gate. An
 otherwise canonical wildcard capture request from the predecessor release is
 also compatibility-only state: it never captures and can only be cancelled,
 replaced by one exact request, or removed on expiry. Other malformed request

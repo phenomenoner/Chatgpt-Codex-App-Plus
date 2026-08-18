@@ -760,6 +760,15 @@ def _uninstall_unlocked(codex_home: Path) -> dict[str, Any]:
             allowed_hashes.add(manifest["installed_sha256"])
         if installed_hash not in allowed_hashes:
             raise InstallerError("refusing to retire a drifted Context Canvas hook script")
+    if (
+        manifest is None
+        and not target_exists
+        and any(index is not None for index in group_indexes.values())
+    ):
+        raise InstallerError(
+            "refusing to retire Context Canvas hook groups without a canonical "
+            "manifest or exact current adapter"
+        )
     changed = any(index is not None for index in group_indexes.values()) or target_exists or manifest is not None
     archived: list[str] = []
     for event_name, group_index in group_indexes.items():

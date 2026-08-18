@@ -1269,7 +1269,11 @@ class ContextCanvasTests(unittest.TestCase):
             self.assertIn("v3", document)
             self.assertIn("host coordination metadata", document)
             self.assertIn("wildcard", document)
+        self.assertIn("Explicit install may adopt", readme)
+        self.assertIn("canonical supported manifest or the exact current adapter", security)
         self.assertIn("manifest-bound v1/v2/v3", design)
+        self.assertIn("groups-only install adoption", design)
+        self.assertIn("groups-only uninstall refusal", design)
         self.assertIn("host-scoped OS lock", design)
         self.assertIn("never matches a callback", design)
         self.assertIn("not an authority", manifest["interface"]["longDescription"])
@@ -1763,6 +1767,117 @@ class ContextCanvasTests(unittest.TestCase):
 
         manifest_path.write_text(json.dumps(original_manifest), encoding="utf-8")
         self.assertTrue(hook_installer.check(codex_home)["ok"])
+
+    def test_user_hook_installer_requires_a_witness_only_for_destructive_retirement(self) -> None:
+        peer_group = {
+            "matcher": "^resume$",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "python peer-hook.py",
+                    "statusMessage": "Unrelated peer",
+                }
+            ],
+        }
+
+        def seed_groups_only(
+            home: Path,
+            events: tuple[str, ...],
+            *,
+            include_peer: bool,
+        ) -> dict[str, dict]:
+            home.mkdir()
+            (home / hook_installer.INSTALLER_LOCK_FILE_NAME).write_bytes(b"")
+            expected = hook_installer._state(home)["expected"]
+            hooks = {
+                "description": "Groups-only compatibility fixture",
+                "hooks": {
+                    event_name: (
+                        ([peer_group] if include_peer and event_name == "SessionStart" else [])
+                        + ([expected[event_name]] if event_name in events else [])
+                    )
+                    for event_name in hook_installer.MANAGED_EVENTS
+                },
+            }
+            (home / "hooks.json").write_text(
+                json.dumps(hooks, ensure_ascii=False, indent=4),
+                encoding="utf-8",
+            )
+            return expected
+
+        def snapshot(home: Path) -> dict[str, bytes]:
+            return {
+                path.relative_to(home).as_posix(): path.read_bytes()
+                for path in sorted(home.rglob("*"))
+                if path.is_file()
+            }
+
+        event_sets = (("SessionStart",), hook_installer.MANAGED_EVENTS)
+        for event_index, events in enumerate(event_sets):
+            for include_peer in (False, True):
+                with self.subTest(events=events, include_peer=include_peer):
+                    home = self.base / (
+                        f"groups-only-refusal-{event_index}-{int(include_peer)}"
+                    )
+                    seed_groups_only(home, events, include_peer=include_peer)
+                    before = snapshot(home)
+                    with self.assertRaisesRegex(
+                        hook_installer.InstallerError,
+                        "canonical manifest or exact current adapter",
+                    ):
+                        hook_installer.uninstall(home)
+                    self.assertEqual(snapshot(home), before)
+
+        adoption_home = self.base / "groups-only-install-adoption"
+        seed_groups_only(
+            adoption_home,
+            hook_installer.MANAGED_EVENTS,
+            include_peer=True,
+        )
+        adoption_hooks_before = (adoption_home / "hooks.json").read_bytes()
+        adopted = hook_installer.install(adoption_home)
+        self.assertTrue(adopted["ok"])
+        self.assertTrue(adopted["changed"])
+        self.assertTrue(hook_installer.check(adoption_home)["ok"])
+        adoption_dir = adoption_home / hook_installer.INSTALL_DIR_NAME
+        self.assertTrue((adoption_dir / hook_installer.INSTALLED_SCRIPT_NAME).is_file())
+        self.assertTrue((adoption_dir / hook_installer.INSTALL_MANIFEST_NAME).is_file())
+        backups = list((adoption_dir / "backups").glob("hooks-*.json"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), adoption_hooks_before)
+        adopted_hooks = json.loads(
+            (adoption_home / "hooks.json").read_text(encoding="utf-8")
+        )
+        self.assertIn(peer_group, adopted_hooks["hooks"]["SessionStart"])
+
+        adapter_home = self.base / "manifestless-current-adapter-retirement"
+        seed_groups_only(
+            adapter_home,
+            hook_installer.MANAGED_EVENTS,
+            include_peer=True,
+        )
+        adapter_dir = adapter_home / hook_installer.INSTALL_DIR_NAME
+        adapter_dir.mkdir()
+        (adapter_dir / hook_installer.INSTALLED_SCRIPT_NAME).write_bytes(
+            SCRIPT.read_bytes()
+        )
+        retired = hook_installer.uninstall(adapter_home)
+        self.assertTrue(retired["ok"])
+        self.assertTrue(retired["changed"])
+        self.assertEqual(len(retired["archived"]), 1)
+        retired_hooks = json.loads(
+            (adapter_home / "hooks.json").read_text(encoding="utf-8")
+        )["hooks"]
+        self.assertEqual(retired_hooks["SessionStart"], [peer_group])
+        self.assertEqual(retired_hooks["UserPromptSubmit"], [])
+        self.assertEqual(retired_hooks["PostToolUse"], [])
+
+        empty_home = self.base / "already-retired"
+        empty_home.mkdir()
+        first = hook_installer.uninstall(empty_home)
+        second = hook_installer.uninstall(empty_home)
+        self.assertTrue(first["ok"] and second["ok"])
+        self.assertFalse(first["changed"] or second["changed"])
 
     def test_user_hook_installer_lock_serializes_cooperating_processes(self) -> None:
         codex_home = self.base / "locked-codex-home"

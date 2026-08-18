@@ -130,6 +130,6 @@ The implementation is accepted only with focused evidence for:
 - transitive-integrity pin promotion and expiry-safe garbage collection;
 - exact GC preview, orphan sweep, pending-plan recovery, and corrupt-graph preflight before mutation;
 - corruption, nested-alias, manifest-identity, oversize, and concurrent-writer behavior;
-- installer merge/uninstall for exact manifest-bound v1/v2/v3 generations, live-adapter drift refusal, one host-scoped OS lock across cooperating transitions, and interrupted-write/archive retry recovery for `SessionStart`, `UserPromptSubmit`, and `PostToolUse` handlers;
+- installer merge/uninstall for exact manifest-bound v1/v2/v3 generations, groups-only install adoption, groups-only uninstall refusal without a manifest or exact current adapter, live-adapter drift refusal, one host-scoped OS lock across cooperating transitions, and interrupted-write/archive retry recovery for `SessionStart`, `UserPromptSubmit`, and `PostToolUse` handlers;
 - MCP message bounds and CLI error behavior; and
 - measured hook latency and compression ratios on representative small and large payloads.
