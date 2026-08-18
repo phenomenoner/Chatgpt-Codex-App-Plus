@@ -1,60 +1,78 @@
 # Context Canvas for Codex App and CLI
 
-`context-canvas-codex` keeps three concerns separate:
+`context-canvas-codex` is an optional session-navigation and long-context
+offload layer. It keeps four concerns separate:
 
-1. hook-derived opaque identity for the current Codex session;
-2. a bounded, explicitly continuable semantic lineage for goals, blockers, decisions, findings, dependencies, and verification pointers;
-3. a full-fidelity-under-declared-policy historical snapshot store for supported Codex `PostToolUse` callback payloads.
+1. a hook-derived opaque binding for the current Codex session;
+2. a bounded task map for goals, decisions, progress, dependencies, blockers,
+   findings, and next steps;
+3. explicit, searchable, chunk-readable text references; and
+4. default-off, one-shot historical `PostToolUse` snapshots.
 
-The design rule is: **copy broadly, index selectively, promote semantically, retain intentionally**. Preserving a tool result no longer means creating an action or finding node for every call.
+The product rule is: **map selectively, offload explicitly, retrieve narrowly,
+revalidate when freshness matters**. Canvas is not a source of truth,
+authorization system, WAL, release gate, or workflow engine. Missing identity,
+map state, lineage, or synchronization never blocks otherwise authorized work.
 
-The design was compared with [`phenomenoner/hermes-agent-harness-plus`](https://github.com/phenomenoner/hermes-agent-harness-plus) at commit `7d6beb485d658a0342194c0e42edcdb7106ed1cb`. This is a clean Codex adaptation; no Hermes source code is copied.
+The design was compared with
+[`phenomenoner/hermes-agent-harness-plus`](https://github.com/phenomenoner/hermes-agent-harness-plus)
+at commit `7d6beb485d658a0342194c0e42edcdb7106ed1cb`. This is a clean Codex
+adaptation; no Hermes source code is copied.
 
 ## Capability alignment
 
-| Concern | Hermes Context Canvas | Codex adaptation |
-|---|---|---|
-| Task identity | Harness-owned session identity | SHA-256 of trusted `SessionStart.session_id` or `UserPromptSubmit.session_id`; workspace paths are metadata only |
-| Agent initialization policy | Harness lifecycle policy | The bundled skill initializes at the first useful boundary whenever one tool call is reasonably expected to exceed five minutes, regardless of task type; hooks supply identity but never predict duration or create the Canvas |
-| Semantic state | Canonical state/events/projections | Canonical Canvas JSON v3 with objective state, lineage, canonical predecessor digest, summary, Mermaid, bounded search, and Markdown closeout |
-| Factual integrity | Factual nodes point to evidence | Terminal factual states require pointer plus SHA-256; a snapshot URI, object, and every transitive blob are verified before pin and node commit |
-| Updates | Add and mutate task facts | Idempotent upsert, explicit status transition, bounded dependency edges, cycle rejection |
-| Discovery and search | Canvas and reference search | Recent-update `canvas_list` with lineage navigation plus metadata-only substring search across at most 256 canvases; snapshot bodies are excluded |
-| Automatic capture | Selected in-process tool-result refs | Each opted-in `PostToolUse` callback payload Codex emits becomes an observation manifest; non-self calls store the complete model-facing input/response under the declared sanitization policy |
-| Historical cache | Raw sequential references | Content-addressed canonical JSON, deterministic gzip, MIME-aware data-URL policies, dedupe, TTL, exact journalled GC, transitive pin validation, and integrity-checked export |
-| Native tools | Harness MCP tools | Eight semantic `canvas_*` tools plus four bounded snapshot-manifest tools; filtered listing stays bounded and complete body retrieval is CLI-only |
-| Concurrency | Process/thread locking and atomic writes | Bootstrap plus normal cross-process locks, atomic replacement, and four-process dedupe coverage |
+| Concern | Codex behavior |
+|---|---|
+| Task binding | SHA-256 of trusted `SessionStart.session_id` or `UserPromptSubmit.session_id`; workspace paths remain metadata |
+| Initialization | Explicit `canvas_start` only when navigation or context offload has a concrete benefit; no duration trigger |
+| Session map | Canvas JSON v3 with objective state, lineage compatibility, dependency edges, bounded search, Mermaid, and closeout |
+| Long-context offload | `reference_put`, `reference_search`, `reference_read`, and `reference_delete` over bounded policy-redacted UTF-8 text |
+| Historical capture | `snapshot_capture_next` arms one expiring request; a matching non-Canvas callback consumes it once; capture is otherwise off |
+| Retrieval | Map metadata, reference text, and requested snapshot payloads have separate bounded read surfaces |
+| Integrity | Content digests, canonical JSON, deterministic gzip, path/ACL checks, cross-process locks, and atomic replacement |
+| Freshness | References and snapshots are labelled historical and require live-source revalidation for current claims |
 
-“Complete” is bounded by what Codex supplies to the hook. For MCP, `tool_response` is the MCP result; for other supported tools it is normally the model-facing output. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload. A Bash non-zero command outcome can still be included. Dispatch or handler failures with no callback payload are absent, and the adapter has no separate failure sibling. The plugin also cannot preserve provider-private wire data that Codex never exposed.
+Terminal factual nodes retain the v3 pointer-plus-SHA-256 rule for backwards
+compatibility. That is a local integrity constraint on the stored node, not
+authority to approve a task, release, or external effect.
 
 ## Runtime shape
 
 ```mermaid
 flowchart LR
-    SS["Codex SessionStart"] --> SR["bounded semantic restore"]
-    UP["Codex UserPromptSubmit"] --> ID["small current-turn identity binding"]
-    PT["Codex PostToolUse"] --> SA["recursive sanitization"]
-    SA --> EV["per-call observation manifest"]
-    SA --> CAS["SHA-256 JSON/blob store"]
-    APP["Codex App"] --> MCP["local stdio MCP"]
-    CLI["Codex CLI"] --> MCP
-    AG["agent predicts a tool call over five minutes"] -->|"canvas_start"| MCP
-    MCP --> MAP["semantic Canvas"]
-    MCP --> LINEAGE["explicit list / continue"]
-    LINEAGE --> MAP
-    MCP --> EV
-    EX["explicit CLI export"] --> CAS
-    MAP -->|"snapshot URI + matching hash"| PIN["durable pin"]
-    PIN --> CAS
+    SS["SessionStart"] --> BIND["optional opaque binding"]
+    UP["UserPromptSubmit"] --> BIND
+    BIND --> MAP["bounded session map"]
+    APP["Codex App or CLI"] --> MCP["local stdio MCP"]
+    MCP --> MAP
+    MCP --> REF["explicit text references"]
+    MCP --> ARM["one-shot capture request"]
+    PT["PostToolUse callback"] --> MATCH{"request matches?"}
+    ARM --> MATCH
+    MATCH -->|"no"| NONE["no persistence"]
+    MATCH -->|"yes, consume once"| SAN["sanitize and content-address"]
+    SAN --> SNAP["historical snapshot"]
+    MCP -->|"bounded explicit read"| REF
+    MCP -->|"bounded explicit read"| SNAP
 ```
 
-The default data root is `%LOCALAPPDATA%\Codex\context-canvas-codex`. Runtime data is never exported into this public repository.
+The binding is transport provenance for Canvas actions. Hooks do not decide
+whether a map or capture is required, and their failure cannot grant or remove
+authority over the underlying task.
+
+## State and lifecycle
+
+The default data root is `%LOCALAPPDATA%\Codex\context-canvas-codex`:
 
 ```text
 context-canvas-codex/
 ├── cc-<opaque-id>/
 │   ├── canvas.json
 │   └── closeout.md
+├── _references/
+│   └── canvases/cc-<opaque-id>/ref-<digest>.{json,txt.gz}
+├── _capture_requests/
+│   └── cc-<opaque-id>.json
 └── _snapshots/
     ├── events/cc-<opaque-id>/obs-<event-hash>.json
     ├── objects/sha256/<prefix>/<payload-hash>.json.gz
@@ -63,77 +81,93 @@ context-canvas-codex/
     └── gc/current.json
 ```
 
-## Capture, sanitization, and recursion
+- Create: `canvas_start`, `reference_put`, or `snapshot_capture_next` is an
+  explicit product action.
+- Restore/read: hooks inject only bounded map state; references and snapshots
+  require explicit bounded reads.
+- Update: map mutations are intentional. A rejected mutation affects only that
+  operation and does not block work outside Canvas.
+- Compact: host compaction may receive a bounded map summary; bodies remain out
+  of automatic injection.
+- Continue: `canvas_continue` creates an explicit successor, preserves the
+  predecessor, and records its canonical digest. Work may also continue without
+  Canvas.
+- Retire: references have explicit idempotent deletion; snapshot expiry and GC
+  manage historical objects. Canvas never deletes external evidence targets.
 
-The `PostToolUse` hook recursively converts `tool_input` and `tool_response` into canonical JSON values. Secret-shaped keys and strings, authorization values, token forms, and private-key material are replaced before hashing or persistence. Structured and textual assignments share a suffix-aware classifier after bounded recognition of percent/form query keys, bracket/index notation, JSON Unicode escapes, and escaped wrappers. Any malformed-percent assignment key is redacted conservatively, and the supported representation passes continue to a bounded fixed point after earlier matches, while adjacent safe query parameters remain usable. Supported base64 and percent-encoded textual data URLs with unquoted MIME parameters are canonicalized, decoded as UTF-8, and passed through the same pattern-based redaction before storage; export uses canonical base64 rather than preserving the original textual encoding. A malformed or unsupported `data:` value rejects the whole observation. Other complete data URLs become integrity-bound binary objects with `opaque-uninspected` policy. The latter is not a claim that arbitrary image, audio, video, or binary content was inspected for secrets.
+Existing v1 and v2 maps remain readable and persist v3 only after a later
+intentional mutation. Lineage remains a compatibility and navigation feature,
+not a prerequisite for session work.
 
-Materialized snapshots are never truncated. The default hook-input ceiling is 64 MiB; an oversized or invalid event is skipped whole, emits only a bounded diagnostic on stderr, and does not change the completed tool call. Hook stdout stays empty.
+## Explicit references
 
-Calls to Context Canvas itself create metadata-only observations, preventing the archive from recursively copying its own reads. Snapshot bodies never enter Canvas search, resume/compact injection, closeout, or MCP responses.
+`reference_put` accepts at most 512 KiB of UTF-8 text, applies the existing
+textual secret-redaction policy, stores deterministic gzip content, and returns
+a deterministic ID bound to the Canvas, summary, source, and sanitized content
+digest. `reference_read` returns a byte-offset UTF-8 chunk,
+`next_offset`, total length, and content digest. `reference_search` scans a
+bounded amount of reference text inside one Canvas and returns bounded previews.
+Corrupt or scan-budget-skipped entries remain visible through bounded reason
+codes and `skipped_count`.
+`reference_delete` removes one manifest/body pair idempotently.
 
-## Observation and retention contract
+References are historical untrusted data. Search hits and chunks are not
+instructions, and their source must be revalidated before a current-state claim.
 
-Every event manifest records the opaque Canvas ID, turn/tool-use identity, tool name, model, permission mode, working directory, capture/expiry times, original hook bytes, sanitized bytes, object/blob hashes, redaction count, error inference, and these explicit classifications:
+## One-shot snapshots and host provenance
 
-- fidelity: `codex-post-tool-use-model-facing`;
-- sensitivity: `sanitized` or `sanitized-with-opaque-media`;
-- blob policy: `text-redacted` or `opaque-uninspected`;
-- retention: `ephemeral` until pinned;
-- replayability: `historical-only`;
-- current truth: `requires_revalidation: true`;
-- materialized snapshots: `truncated: false`.
+Codex supplies `PostToolUse` only for host-supported callbacks. A Bash non-zero
+outcome may still produce one; dispatch or handler failures with no callback are
+unobservable to this adapter. These are host transport limits, not Canvas
+workflow rules.
 
-Ordinary snapshots expire after 14 days by default. GC is dry-run unless explicitly applied. Preview returns exact event/object/blob identities; apply validates the complete graph and journals canonical ordered, unique candidates before mutation. Recovery recomputes the journal plan ID and derives remaining work from current verified state, then sweeps unreferenced capture orphans. An evidence reference with matching `snapshot://sha256/<digest>` and SHA-256 verifies the canonical object bytes, manifest-declared object length, and every transitive blob before pinning and semantic-node commit. The same object may support several nodes without another copy.
+The Canvas hook stores nothing unless a live capture request matches. The
+request has a bounded TTL and retention value, exact tool matching is preferred,
+tool mismatch does not consume it, Canvas self-tools are ignored, and one match
+consumes it under a cross-process lock. The hook emits no model-facing output
+and fails open with respect to the completed tool call.
 
-## Semantic schema
+A materialized snapshot contains the complete model-facing `tool_input` and
+`tool_response` after the declared sanitization and opaque-media policy. It is
+never silently truncated: oversize, malformed, or unsupported payloads are
+skipped whole. This is not provider-private wire data or a sealed unredacted
+evidence tier.
 
-Canvas schema v3 supports:
-
-- factual kinds: `goal`, `blocker`, `decision`, `verification`, `finding`, `action`;
-- non-factual kinds: `plan`, `question`, `assumption`;
-- statuses: `active`, `blocked`, `done`, `superseded`, `verify`, `planned`, `doing`, `deprecated`.
-
-A factual node entering `blocked`, `done`, `superseded`, `verify`, or `deprecated` requires hash-bound evidence. Objective state is separate: `active`, `completed`, or `abandoned`. A goal cannot be marked `blocked`; an open constraint is a blocker node while the objective remains active. Legacy v1/v2 blocked goals restore as active objectives, and older canvases persist v3 only on the next intentional mutation.
-
-Each initial Canvas receives a stable lineage ID. `canvas_continue` requires the current hook-provided ID and an explicit predecessor ID, copies only validated bounded semantic state, leaves the predecessor unchanged, and stores the SHA-256 of its canonical state. Repeating `canvas_start` never overwrites an existing ID: mismatched goal, cwd, or title values return a nonfatal conflict list.
+The existing content-addressed object/blob format, dedupe, 14-day default TTL,
+explicit pins, transitive integrity validation, and dry-run-first journalled GC
+remain compatible. Older metadata-only self-tool observations remain readable;
+the new one-shot hook path does not create them.
 
 ## MCP and CLI surfaces
 
 The local stdio MCP server exposes:
 
-- `canvas_start`, `canvas_continue`, `canvas_list`, `canvas_upsert_node`, `canvas_set_status`, `canvas_read`, `canvas_search`, `canvas_closeout`;
-- `snapshot_list`, `snapshot_read`, `snapshot_pin`, `snapshot_gc`.
+- `canvas_start`, `canvas_continue`, `canvas_list`, `canvas_upsert_node`,
+  `canvas_set_status`, `canvas_read`, `canvas_search`, `canvas_closeout`;
+- `reference_put`, `reference_read`, `reference_search`, `reference_delete`;
+- `snapshot_capture_next`, `snapshot_capture_cancel`, `snapshot_list`,
+  `snapshot_read`, `snapshot_pin`, `snapshot_gc`.
 
-Snapshot MCP tools return bounded manifests and pin/GC receipts, not payload bodies. Use the CLI for complete policy-sanitized historical export:
+`snapshot_read` is manifest-only by default. `include_payload=true` returns one
+bounded canonical-JSON chunk with offsets and a digest. Complete file export
+remains an explicit CLI operation.
 
 ```powershell
-python -I scripts/context_canvas.py list --limit 8 --cwd <absolute-workspace>
-python -I scripts/context_canvas.py continue --canvas-id <current-opaque-id> --predecessor-canvas-id <prior-opaque-id>
-python -I scripts/context_canvas.py snapshot-list --canvas-id <opaque-id> --tool-name shell_command --capture-status stored --limit 20
-python -I scripts/context_canvas.py snapshot-read --canvas-id <opaque-id> --event-id <obs-id>
+python -I scripts/context_canvas.py reference-put --canvas-id <opaque-id> --summary "Exploration summary" --content-file <absolute-utf8-text-file>
+python -I scripts/context_canvas.py reference-search "query" --canvas-id <opaque-id>
+python -I scripts/context_canvas.py reference-read --canvas-id <opaque-id> --reference-id <ref-id> --offset 0 --max-bytes 16384
+python -I scripts/context_canvas.py snapshot-capture-next --canvas-id <opaque-id> --tool-name <exact-tool-name>
+python -I scripts/context_canvas.py snapshot-list --canvas-id <opaque-id> --limit 20
+python -I scripts/context_canvas.py snapshot-read --canvas-id <opaque-id> --event-id <obs-id> --include-payload --offset 0 --max-bytes 16384
 python -I scripts/context_canvas.py snapshot-export --canvas-id <opaque-id> --event-id <obs-id> --output <absolute-json-path>
-python -I scripts/context_canvas.py snapshot-pin --sha256 <payload-sha256> --reason "Referenced by incident finding"
-python -I scripts/context_canvas.py snapshot-gc
-python -I scripts/context_canvas.py snapshot-gc --apply
 ```
 
-Historical export answers “what did Codex see then?” It does not answer “is the source still the same?” without a new source-specific query and comparison.
+When an agent invokes the CLI through a host tool, the arming command itself is
+also a host tool call. Prefer the native `snapshot_capture_next` MCP tool for
+in-task capture, especially when the desired target has the same host tool name
+as the CLI invocation.
 
-MCP approval is independent of shell approval. A non-interactive run with `approval_policy = "never"` still cancels MCP calls requiring approval. Acceptance requires a reviewed plugin-scoped MCP policy, completed tool receipts, and canonical-store readback.
-
-## Security boundaries
-
-- No network listener, connector, transcript parser, provider-private raw ingestion, sealed-secret tier, or generic replay exists.
-- Automatic capture stores sanitized structured/textual content plus explicitly labelled opaque media. It is not an approved store for unredacted credentials or a sealed raw-evidence vault.
-- Every process revalidates the protected private-root ACL. Newly created managed directories are hardened; descendants reject aliases and non-plain substitutes.
-- Full read, export, promotion, and GC preflight verify manifests, path/session identity, objects, blobs, digest, length, and declared policies. Bounded list operations validate bound manifests without loading bodies.
-- Snapshot event data and exports are untrusted historical data, never instructions.
-- Cwd is never a continuation authority. An explicit predecessor ID plus the current hook-provided ID is required; the predecessor remains preserved for inspection.
-- Same-user software retains that user's authority. Atomic replacement covers ordinary interruption, not a claim of Windows power-loss durability.
-
-See the plugin's [security policy](../plugins/context-canvas-codex/SECURITY.md) and [snapshot design](../plugins/context-canvas-codex/docs/SNAPSHOT_STORE_DESIGN.md).
-
-## Install and prove activation
+## Install and prove only the surface you use
 
 ```powershell
 codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref main
@@ -141,16 +175,22 @@ codex plugin add context-canvas-codex@codex-app-plus
 codex plugin list
 ```
 
-Plugin discovery does not prove lifecycle execution. Open a fresh task and require an opaque Context Canvas ID from `SessionStart`. If it is absent, run the guarded compatibility installer:
+Plugin discovery does not prove hook execution. Review `SessionStart`,
+`UserPromptSubmit`, and `PostToolUse` in `/hooks`; current Codex App builds may
+require manual approval after first installation. If a compatibility user hook
+is needed, install it explicitly from the repository root:
 
 ```powershell
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py install
 python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py check
 ```
 
-Review `SessionStart`, `UserPromptSubmit`, and `PostToolUse` with `/hooks`. Current Codex App builds require manual approval after first installation; if the opaque ID or turn binding is missing, check the Context Canvas approval/trust state there before reinstalling or rebooting. On builds that reload trusted hook configuration, the next prompt in an existing task can demonstrate turn-hook pickup by supplying its current opaque ID; this is useful recovery evidence, not a universal hot-reload guarantee. Then open another fresh task, require a new `SessionStart` ID, perform one harmless supported tool call, and require a new `_snapshots/events` manifest plus an explicit CLI export/readback. This proves only those observed paths, not every tool family or dispatch/handler failure path. Re-run `install` after plugin upgrades so stable user-hook bytes match the plugin. Legacy migration requires exact recorded ownership digests; a retry recovers an interrupted script-first install only when the bytes exactly match. Uninstall removes only exact managed groups and recoverably retires owned files.
+A missing binding means Canvas actions are unavailable, not that the task is
+blocked. To prove capture, open a fresh task, obtain its hook-derived ID, arm one
+exact harmless call, and inspect that call's manifest and bounded readback. This
+proves only the observed hook/tool path.
 
-## Reproduce verification and performance
+## Reproduce verification
 
 From `plugins/context-canvas-codex`:
 
@@ -159,4 +199,6 @@ python -B -m unittest scripts.test_context_canvas -v
 python -B -I scripts/benchmark_context_canvas.py
 ```
 
-The JSON result includes p50/p95 samples for in-process read/search, persistent MCP read, warmed dedupe, manifest read, exact GC preview, fresh CLI read, and cold small/large hooks, plus first-write and compression metadata. GC verifies the event/object/blob graph and discovers orphans, so its latency should not be compared with an earlier count-only preview. Python startup, storage, ACL inspection, antivirus, concurrent load, and payload shape materially affect results. Bind any published measurement to the exact executable hashes and environment captured by the same verification receipt; do not treat one development machine as a latency promise.
+The benchmark's direct snapshot-store writes exercise storage mechanics and do
+not imply default-on capture. Bind any published measurement to the exact source,
+environment, and operation shape used for that receipt.

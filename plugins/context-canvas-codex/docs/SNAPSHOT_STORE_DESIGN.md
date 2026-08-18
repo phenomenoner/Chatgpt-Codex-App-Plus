@@ -2,18 +2,19 @@
 
 ## Purpose
 
-Context Canvas keeps two different kinds of state:
+Context Canvas keeps three different kinds of state:
 
-1. a small semantic map of goals, blockers, decisions, findings, and verification; and
-2. a historical evidence cache containing the complete post-sanitization payload that Codex supplied to a `PostToolUse` hook.
+1. a small optional session map of goals, decisions, progress, dependencies, blockers, and next steps;
+2. explicit, bounded text references for long-context offload and native retrieval; and
+3. a default-off historical cache for one explicitly requested post-sanitization `PostToolUse` payload.
 
-The snapshot cache preserves what the agent actually saw at a point in time without turning every tool invocation into a semantic node. The guiding rule is:
+References preserve selected useful text; one-shot snapshots preserve what the agent saw at a specific point without copying every tool invocation. The guiding rule is:
 
-> Copy broadly, index selectively, promote semantically, retain intentionally.
+> Map selectively, offload explicitly, retrieve narrowly, revalidate when freshness matters.
 
 ## Fidelity boundary
 
-The capture source is the Codex `PostToolUse` hook payload. Current Codex emits it when a supported handler returns an opted-in post-tool payload; a Bash command that exits non-zero can still produce it. Dispatch or handler failures that produce no callback payload remain absent, and Codex exposes no separate failure sibling to this adapter. For MCP calls it contains the MCP call result; for other supported tools it normally contains the model-facing result. A snapshot therefore proves what Codex delivered to this hook, not necessarily the provider's private wire response, and it cannot prove that every attempted call was observed.
+Capture is off unless `snapshot_capture_next` has armed one visible, expiring request. The source is then the next matching non-Canvas Codex `PostToolUse` hook payload, and the request is consumed once. Current Codex emits this callback when a supported handler returns an opted-in post-tool payload; a Bash command that exits non-zero can still produce it. Dispatch or handler failures that produce no callback payload remain absent. For MCP calls it contains the MCP call result; for other supported tools it normally contains the model-facing result. A snapshot therefore proves what Codex delivered to this hook, not necessarily the provider's private wire response, and it cannot prove that every attempted call was observed.
 
 The stored object contains the full captured `tool_input` and `tool_response` after deterministic sanitization. It is never silently truncated. If the hook input exceeds the configured hard limit or cannot be parsed, capture fails as an explicit observation error rather than writing a partial object.
 
@@ -28,6 +29,10 @@ context-canvas-codex/
 ├── cc-<opaque-id>/
 │   ├── canvas.json
 │   └── closeout.md
+├── _references/
+│   └── canvases/cc-<opaque-id>/ref-<digest>.{json,txt.gz}
+├── _capture_requests/
+│   └── cc-<opaque-id>.json
 └── _snapshots/
     ├── .snapshot.lock
     ├── objects/sha256/<prefix>/<digest>.json.gz
@@ -41,7 +46,7 @@ context-canvas-codex/
 - Gzip is deterministic and available in the Python standard library. This keeps the plugin dependency-free on Codex App and CLI hosts.
 - Supported embedded `data:` URLs are decoded into content-addressed blobs. Textual MIME content is redacted before persistence and records `text-redacted`; other media records `opaque-uninspected`. The JSON object stores a typed blob reference and export rehydrates a canonical base64 data URL.
 - Each observation manifest records provenance independently from the deduplicated object.
-- Snapshot bodies and blob contents are excluded from `canvas_search`; only promoted node summaries and evidence pointers are searchable.
+- Reference and snapshot bodies are excluded from lifecycle injection and closeout. `reference_search` scans only bounded policy-redacted reference text in one Canvas; snapshot bodies are excluded from map and reference search.
 
 ## Observation manifest
 
@@ -60,7 +65,7 @@ Each captured call records:
 - capture status, inferred exit/error metadata when the tool response exposes it;
 - replayability class and whether current-state revalidation is required.
 
-Event identity is derived from the opaque Canvas ID, turn, tool-use ID, and tool name. Validation requires lowercase canonical SHA-256 identities and binds the manifest to its parent path, session hash, event filename, retention interval, canonical object bytes and declared byte length, and every declared blob. Re-running the same hook input is idempotent. Context Canvas tool calls are recorded as metadata-only observations so the cache does not recursively capture itself.
+Event identity is derived from the opaque Canvas ID, turn, tool-use ID, and tool name. Validation requires lowercase canonical SHA-256 identities and binds the manifest to its parent path, session hash, event filename, retention interval, canonical object bytes and declared byte length, and every declared blob. Re-running the same hook input is idempotent. The one-shot hook path ignores Context Canvas tools without consuming the pending request, preventing recursive self-capture; older metadata-only observations remain readable.
 
 ## Retention and promotion
 
@@ -75,7 +80,7 @@ sha256  = <same digest>
 
 is validated against the local object and every transitive blob, then pinned before the semantic node is committed. A pin is content-level, can be referenced by more than one node, and exempts the object from ordinary expiry. A failed Canvas commit may leave a conservative extra pin, but never a semantic reference to missing or corrupt evidence.
 
-Ordinary file and URL evidence pointers keep their existing pointer-plus-hash semantics and are not copied automatically by the semantic API.
+Ordinary file and URL evidence pointers keep their existing pointer-plus-hash semantics and are not copied by the semantic API. Explicit managed references are a separate offload mechanism and do not become factual-node evidence automatically.
 
 ## Retrieval modes
 
@@ -85,20 +90,25 @@ Ordinary file and URL evidence pointers keep their existing pointer-plus-hash se
 
 Every manifest includes capture time, expiry, source identity, replayability, and a revalidation flag so historical evidence cannot be mistaken for current truth.
 
+Explicit managed references have a separate lifecycle: `reference_put` sanitizes and stores bounded UTF-8 text; `reference_search` returns bounded previews; `reference_read` returns byte-offset UTF-8 chunks plus a digest and next offset; `reference_delete` removes the manifest and body idempotently. References are also historical and require live-source revalidation for current-state claims.
+
 ## Interfaces
 
-The hidden `hook-post-tool-use` command captures observations and exits without adding model context. Capture errors are fail-open for the completed tool call and emit bounded diagnostics without echoing payload content.
+The hidden `hook-post-tool-use` command first checks for an explicit capture request. With no request it stores nothing; with a match it consumes the request and captures one observation without adding model context. Capture errors are fail-open for the completed tool call and emit bounded diagnostics without echoing payload content.
 
 Operator interfaces provide:
 
 - bounded manifest listing and inspection with exact tool-name, capture-status,
   pin-state, and stable event-cursor filters;
+- explicit reference put/search/chunk-read/delete;
+- arm/cancel operations for one expiring capture request;
+- explicit bounded snapshot-payload chunks through MCP and CLI;
 - explicit complete policy-sanitized export to a caller-selected file;
 - explicit pinning;
 - dry-run-first retention garbage collection with exact candidate identities and interruption recovery; and
 - snapshot URIs suitable for semantic-node evidence refs.
 
-MCP responses remain bounded. Large payload export stays a CLI operation so retrieving evidence does not flood the model context.
+MCP responses remain bounded. Complete payload export stays a CLI operation so retrieving evidence does not flood the model context.
 
 ## Security and concurrency
 
@@ -111,11 +121,13 @@ Hook stdout stays empty on success, so snapshots consume storage rather than mod
 The implementation is accepted only with focused evidence for:
 
 - complete round-trip capture and CLI export, including Unicode and embedded binary data;
+- default-off capture, exact-tool matching, one-shot consumption, expiry, cancellation, and Canvas self-tool exclusion;
+- explicit reference sanitization, bounded search, UTF-8 chunk reconstruction, digest validation, and idempotent deletion;
 - deterministic sanitization including suffix-qualified, percent/form-encoded, malformed-percent, bracket-decorated, JSON-escaped, escaped-wrapper, and mixed-representation assignment keys, with safe neighboring query controls preserved, secret sentinels absent from every inspected textual or decompressed file, and explicit opaque-media policy;
 - textual data-URL body and whole-value MIME-parameter redaction that self-validates before persistence and survives read, export, promotion, and GC preflight;
 - content-addressed deduplication and idempotent event capture;
 - snapshot exclusion from semantic search;
-- automatic transitive-integrity pin promotion and expiry-safe garbage collection;
+- transitive-integrity pin promotion and expiry-safe garbage collection;
 - exact GC preview, orphan sweep, pending-plan recovery, and corrupt-graph preflight before mutation;
 - corruption, nested-alias, manifest-identity, oversize, and concurrent-writer behavior;
 - installer merge/uninstall, exact legacy owner-digest migration, drift refusal, and interrupted-install recovery for `SessionStart`, `UserPromptSubmit`, and `PostToolUse` handlers;

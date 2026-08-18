@@ -28,7 +28,7 @@ class PluginMarketplaceContractTests(unittest.TestCase):
         )
         self.assertEqual(manifest["name"], "context-canvas-codex")
         base_version, separator, build_metadata = manifest["version"].partition("+")
-        self.assertEqual(base_version, "0.4.0")
+        self.assertEqual(base_version, "0.5.0")
         self.assertEqual(separator, "+")
         self.assertRegex(
             build_metadata,

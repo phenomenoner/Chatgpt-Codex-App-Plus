@@ -1,5 +1,5 @@
 {
-  "description": "Bounded Context Canvas recovery plus policy-sanitized PostToolUse snapshots.",
+  "description": "Optional Context Canvas task-map binding plus explicitly requested PostToolUse snapshots.",
   "hooks": {
     "SessionStart": [
       {
@@ -10,7 +10,7 @@
             "command": "python3 -I \"${PLUGIN_ROOT}/scripts/context_canvas.py\" hook-session-start",
             "commandWindows": "python -I \"$env:PLUGIN_ROOT\\scripts\\context_canvas.py\" hook-session-start",
             "timeout": 10,
-            "statusMessage": "Restoring bounded task checkpoint",
+            "statusMessage": "Restoring optional Context Canvas map",
             "additionalContextLimit": 5000
           }
         ]
@@ -38,7 +38,7 @@
             "command": "python3 -I \"${PLUGIN_ROOT}/scripts/context_canvas.py\" hook-post-tool-use",
             "commandWindows": "python -I \"$env:PLUGIN_ROOT\\scripts\\context_canvas.py\" hook-post-tool-use",
             "timeout": 30,
-            "statusMessage": "Archiving sanitized tool snapshot"
+            "statusMessage": "Checking explicit Canvas capture request"
           }
         ]
       }

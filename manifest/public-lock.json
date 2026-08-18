@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 1882,
+      "bytes": 1730,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/.codex-plugin/plugin.json",
-      "sha256": "336403c04ecc3b332b1e69fe816eb05db1889ad2428d0d0c75369ce138285beb"
+      "sha256": "c2fcc5ebb86a28885b58d75fb147a303d84281c11d5324696f130a5ea0e7d64d"
     },
     {
       "bytes": 226,
@@ -25,28 +25,28 @@
       "sha256": "14fc5530a71e04722a9e72a9177723fe0443eb3f639f60d36d87cd4a2d4e8ab3"
     },
     {
-      "bytes": 14604,
+      "bytes": 15363,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/README.md",
-      "sha256": "6b69a5e9602c60003c3a99d1d968a5fc6a86abb128b694a4c6e24fed814d70f5"
+      "sha256": "80a70969ee04ef2e92a1b7483e48a6902b572d5fa95c0f38006002d8621397e8"
     },
     {
-      "bytes": 9565,
+      "bytes": 10076,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/SECURITY.md",
-      "sha256": "9ebf2a55234871653d956378fb669ae9e6f42b7d93bb67c93a7dd7d79fca666e"
+      "sha256": "cf6b0de4b8fc43d0d3bcbbdb48060f171a32b4aa0ae0f530748e3705485e1182"
     },
     {
-      "bytes": 10289,
+      "bytes": 11814,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/docs/SNAPSHOT_STORE_DESIGN.md",
-      "sha256": "ae8617aab8e33101b16bbac5df5054393c7d3d351c1b991b32290a495775c200"
+      "sha256": "78697a71fae50aa194323f05dc5e68289a3763315100dde1d021878c4384742d"
     },
     {
-      "bytes": 1531,
+      "bytes": 1555,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/hooks/hooks.json",
-      "sha256": "e0a03e52b8e515cc1e48fcd8b59d5b7019860e96ff148db5f05f0ab039f3ab22"
+      "sha256": "79824a1326c6b0b87a79f640fad00700b27829cc2b4d8cf88529844c2660d3d9"
     },
     {
       "bytes": 10824,
@@ -55,40 +55,40 @@
       "sha256": "65b3f1ab6b1d8fb69522fbd46d91d47b524fed294e5f21c9a5e36767c99ec3b6"
     },
     {
-      "bytes": 171341,
+      "bytes": 209917,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas.py",
-      "sha256": "272e9d399419037bc48381e8075fb876dbbfcab83997f0031dd29dd8c24e570a"
+      "sha256": "4cc222fff9008f1d057beb9804857dd1181f55c0a64388604afb6e9b23abe94f"
     },
     {
-      "bytes": 20592,
+      "bytes": 28591,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/context_canvas_mcp.py",
-      "sha256": "d476401849c5acc466d56390c4b1149464954dc88cd2ea6dcd58ef984dea712b"
+      "sha256": "49c9565a553575c0e865cacf30aa7223b19421ce2a471d33260e9b67cf4b92e9"
     },
     {
-      "bytes": 20960,
+      "bytes": 21084,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/install_context_canvas_hook.py",
-      "sha256": "9722df9461da087807f3ca0b81ec7b206096009330cec8b5c1733273cd4e549b"
+      "sha256": "b05a2a7544f1538ab95b441e3267882569385d68a2495380670ce1ad53092aa5"
     },
     {
-      "bytes": 117088,
+      "bytes": 129538,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/test_context_canvas.py",
-      "sha256": "9cad53d9cd536dd612721fe1bfcc338b879f8f730ac41dc8ef2ed28c9dc27adf"
+      "sha256": "8cda00b97f648689eecca10c27c39631e08941c02aa98207804bfbbc2a160705"
     },
     {
-      "bytes": 10723,
+      "bytes": 9047,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/SKILL.md",
-      "sha256": "38df6ad3b7b3d032df8fedbf1808a58aa23fe85e589121a257f0926809fa6625"
+      "sha256": "b5a71d56ab9bafed63f7c0295df189e0255888532654b000d5036dfb07d5cbf6"
     },
     {
-      "bytes": 429,
+      "bytes": 474,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/agents/openai.yaml",
-      "sha256": "9ed874c518260785d0e8425aeaacd05636509e8473b3ee21d6e02be09d263568"
+      "sha256": "c75e377c3eea62296bd942c1ed0b67e6e59bfddf642240a42ca621764f336647"
     },
     {
       "bytes": 7244,

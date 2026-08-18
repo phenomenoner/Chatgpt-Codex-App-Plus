@@ -1,7 +1,7 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.4.0+codex.20260809100430",
-  "description": "Continuable task maps with long-tool-call initialization and policy-sanitized historical snapshots for Codex App and CLI.",
+  "version": "0.5.0+codex.20260818",
+  "description": "Optional session task maps with explicit long-context references and one-shot historical captures for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"
   },
@@ -10,7 +10,7 @@
   "license": "MIT",
   "keywords": [
     "context-management",
-    "checkpoint",
+    "task-map",
     "evidence",
     "snapshot",
     "cache",
@@ -20,8 +20,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Context Canvas Codex",
-    "shortDescription": "Checkpoint long calls, continue maps, and archive snapshots.",
-    "longDescription": "Keeps session provenance separate from a continuable semantic task lineage and a local PostToolUse snapshot store. The bundled skill initializes a Canvas before any tool call reasonably expected to exceed five minutes, regardless of task type, while hooks remain identity-only. Task maps reopen without destructive mismatch errors, explicit continuation preserves a hash-bound predecessor, and recent canvases plus filtered snapshot history remain discoverable. Snapshots use explicit textual-redaction and opaque-media policies, content addressing, deduplication, bounded retention, and explicit export.",
+    "shortDescription": "Navigate session work and offload retrievable context.",
+    "longDescription": "Adds an optional session map for goals, decisions, progress, dependencies, blockers, and next steps. Large textual results can be offloaded into explicit, bounded, searchable references and read back in chunks. A separate PostToolUse history capture is off by default and stores only the next explicitly requested callback. Trusted hook IDs provide transport provenance for Canvas actions; missing Canvas state never blocks the underlying task and Canvas is not an authority, workflow engine, WAL, or source of truth.",
     "developerName": "phenomenoner",
     "category": "Productivity",
     "capabilities": [
@@ -29,9 +29,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Create or restore the task map for this work, including automatic initialization before a tool call expected to exceed five minutes.",
+      "Create or restore an optional task map when navigation or offload would add value.",
       "List my recent task canvases and continue the relevant lineage here.",
-      "Search this task map or historical tool snapshots and prepare a closeout or policy-sanitized export."
+      "Store, search, or retrieve explicit references and opted-in historical tool snapshots for this task."
     ]
   }
 }

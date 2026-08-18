@@ -155,7 +155,8 @@ class ContextCanvasTests(unittest.TestCase):
             {"session_id": self.session_id, "source": "compact"},
             self.store,
         )
-        self.assertIn("No Context Canvas checkpoint exists", resume["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("state=absent", resume["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("does not block", resume["hookSpecificOutput"]["additionalContext"])
         self.assertFalse(self.root.exists())
 
     def test_user_prompt_hook_recovers_identity_without_session_start(self) -> None:
@@ -176,6 +177,135 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn(self.canvas_id, context)
         self.assertIn("turn binding", context.lower())
         self.assertFalse(self.root.exists(), "identity recovery must remain read-only")
+
+    def test_missing_canvas_binding_is_optional_and_non_governing(self) -> None:
+        output = canvas.user_prompt_submit_output(
+            {
+                "session_id": self.session_id,
+                "turn_id": "turn-optional-binding",
+                "hook_event_name": "UserPromptSubmit",
+                "prompt": "Continue without a Canvas",
+            },
+            self.store,
+        )
+
+        context = output["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("state=absent", context)
+        self.assertIn("does not block", context)
+        self.assertNotIn("do not create one automatically", context)
+        self.assertNotIn("WAL", context)
+        self.assertNotIn("blocker", context.lower())
+        self.assertFalse(self.root.exists(), "optional binding must remain read-only")
+
+    def test_explicit_reference_round_trip_search_and_delete(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        secret = "REF_" + "TOKEN_123456789"
+        original = ("探索摘要\n" * 128) + "authorization=Bearer " + secret + "\nNEEDLE"
+        created_at = datetime(2026, 8, 18, tzinfo=timezone.utc)
+
+        stored = references.put(
+            self.canvas_id,
+            summary="Large exploration result",
+            content=original,
+            source="mcp__example__research",
+            now=created_at,
+        )
+
+        self.assertTrue(stored["created"])
+        self.assertGreater(stored["redaction_count"], 0)
+        first = references.read(
+            self.canvas_id,
+            stored["reference_id"],
+            offset=0,
+            max_bytes=257,
+        )
+        chunks = [first["chunk"]]
+        cursor = first["next_offset"]
+        while cursor is not None:
+            part = references.read(
+                self.canvas_id,
+                stored["reference_id"],
+                offset=cursor,
+                max_bytes=257,
+            )
+            chunks.append(part["chunk"])
+            cursor = part["next_offset"]
+        reconstructed = "".join(chunks)
+        self.assertNotIn(secret, reconstructed)
+        self.assertIn("[REDACTED]", reconstructed)
+        self.assertIn("NEEDLE", reconstructed)
+        self.assertEqual(
+            hashlib.sha256(reconstructed.encode("utf-8")).hexdigest(),
+            stored["content_sha256"],
+        )
+        duplicate = references.put(
+            self.canvas_id,
+            summary="Large exploration result",
+            content=original,
+            source="mcp__example__research",
+            now=created_at + timedelta(hours=1),
+        )
+        self.assertFalse(duplicate["created"])
+        self.assertEqual(duplicate["created_at"], stored["created_at"])
+        with self.assertRaisesRegex(canvas.CanvasError, "too small"):
+            references.read(
+                self.canvas_id,
+                stored["reference_id"],
+                offset=0,
+                max_bytes=1,
+            )
+
+        search = references.search(self.canvas_id, "needle")
+        self.assertEqual(search["hits"][0]["reference_id"], stored["reference_id"])
+        self.assertIn("NEEDLE", search["hits"][0]["preview"])
+        self.assertEqual(search["skipped_count"], 0)
+
+        deleted = references.delete(self.canvas_id, stored["reference_id"])
+        self.assertTrue(deleted["deleted"])
+        self.assertFalse(references.delete(self.canvas_id, stored["reference_id"])["deleted"])
+        with self.assertRaisesRegex(canvas.CanvasError, "not found"):
+            references.read(self.canvas_id, stored["reference_id"])
+
+    def test_reference_store_enforces_its_per_canvas_capacity(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        with mock.patch.object(canvas, "MAX_REFERENCES_PER_CANVAS", 1):
+            references.put(
+                self.canvas_id,
+                summary="First bounded reference",
+                content="first",
+            )
+            with self.assertRaisesRegex(canvas.CanvasError, "per-canvas limit"):
+                references.put(
+                    self.canvas_id,
+                    summary="Second bounded reference",
+                    content="second",
+                )
+
+    def test_reference_read_rejects_corrupt_content(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        stored = references.put(
+            self.canvas_id,
+            summary="Integrity-bound reference",
+            content="content that must remain hash-bound",
+        )
+        content_path = (
+            self.root
+            / "_references"
+            / "canvases"
+            / self.canvas_id
+            / f"{stored['reference_id']}.txt.gz"
+        )
+        content_path.write_bytes(b"not-a-gzip-object")
+
+        with self.assertRaisesRegex(canvas.CorruptCanvasError, "unreadable"):
+            references.read(self.canvas_id, stored["reference_id"])
+        search = references.search(self.canvas_id, "must remain")
+        self.assertEqual(search["hits"], [])
+        self.assertEqual(
+            search["skipped"],
+            [{"reference_id": stored["reference_id"], "reason": "corrupt_content"}],
+        )
+        self.assertEqual(search["skipped_count"], 1)
 
     def test_reopen_mismatch_is_nonfatal_and_read_only(self) -> None:
         self.initialize(goal="Original durable objective")
@@ -287,7 +417,7 @@ class ContextCanvasTests(unittest.TestCase):
         assert payload is not None
         summary = canvas.render_lifecycle_summary(payload)
         self.assertLessEqual(len(summary.encode("utf-8")), canvas.MAX_ADDITIONAL_CONTEXT_BYTES)
-        self.assertIn("checkpoint truncated at safe bound", summary)
+        self.assertIn("task map truncated at safe bound", summary)
 
     def test_sensitive_sentinel_is_rejected_before_disk_write(self) -> None:
         sentinel = "Authorization: " + "Bearer " + "TEST_TOKEN_DO_NOT_STORE"
@@ -518,7 +648,8 @@ class ContextCanvasTests(unittest.TestCase):
             self.store,
         )
         context = output["hookSpecificOutput"]["additionalContext"]
-        self.assertIn("unavailable or invalid", context)
+        self.assertIn("state=unavailable", context)
+        self.assertIn("does not block", context)
         self.assertNotIn("MALICIOUS INSTRUCTION", context)
 
     def test_schema_rejects_excess_nodes_and_unknown_fields(self) -> None:
@@ -646,9 +777,9 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
         default_prompts = manifest["interface"]["defaultPrompt"]
         self.assertEqual(len(default_prompts), 3)
-        self.assertIn("exceed five minutes", default_prompts[0])
+        self.assertIn("when navigation or offload would add value", default_prompts[0])
         self.assertIn("continue", default_prompts[1])
-        self.assertIn("snapshots", default_prompts[2])
+        self.assertIn("references", default_prompts[2])
         agent_config = (
             PLUGIN_ROOT
             / "skills"
@@ -666,14 +797,14 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertIn("Keep one MCP registration authority", readme)
         self.assertRegex(readme, r"Never\s+leave both registrations active")
 
-    def test_skill_declares_long_tool_call_auto_initialization_contract(self) -> None:
+    def test_skill_declares_optional_value_triggered_initialization_contract(self) -> None:
         skill = (PLUGIN_ROOT / "skills" / "context-canvas-checkpoint" / "SKILL.md").read_text(
             encoding="utf-8"
         )
-        self.assertIn("more than five minutes", skill)
-        self.assertIn("regardless of domain or task type", skill)
-        self.assertRegex(skill, r"create a\s+Canvas automatically")
-        self.assertRegex(skill, r"hooks never predict duration or\s+create a Canvas")
+        self.assertIn("navigation or long-context offload", skill)
+        self.assertIn("explicit", skill)
+        self.assertNotIn("more than five minutes", skill)
+        self.assertNotRegex(skill, r"create a\s+Canvas automatically")
         self.assertIn("manual approval of newly installed hooks", skill)
         self.assertIn("inspect `/hooks`", skill)
 
@@ -1140,7 +1271,7 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertEqual(len(result["hits"]), 1)
         self.assertFalse((self.base / "missing" / "needle-evidence.txt").exists())
 
-    def test_mcp_stdio_server_exposes_pointer_only_canvas_tools(self) -> None:
+    def test_mcp_stdio_server_exposes_bounded_map_reference_and_snapshot_tools(self) -> None:
         self.assertTrue(MCP_SCRIPT.is_file())
         captured = canvas.SnapshotStore(root=self.root).capture_post_tool_use(
             {
@@ -1154,7 +1285,7 @@ class ContextCanvasTests(unittest.TestCase):
                 "tool_name": "mcp__web__open",
                 "tool_use_id": "call-mcp-snapshot",
                 "tool_input": {"url": "https://example.invalid/mcp-snapshot"},
-                "tool_response": {"text": "MCP must not return this snapshot body"},
+                "tool_response": {"text": "MCP explicit bounded snapshot body"},
             }
         )
         process = subprocess.Popen(
@@ -1221,8 +1352,14 @@ class ContextCanvasTests(unittest.TestCase):
                     "canvas_closeout",
                     "snapshot_list",
                     "snapshot_read",
+                    "snapshot_capture_next",
+                    "snapshot_capture_cancel",
                     "snapshot_pin",
                     "snapshot_gc",
+                    "reference_put",
+                    "reference_read",
+                    "reference_search",
+                    "reference_delete",
                 }
                 <= names
             )
@@ -1286,13 +1423,101 @@ class ContextCanvasTests(unittest.TestCase):
             manifest_result = snapshot_read["result"]["structuredContent"]
             self.assertNotIn("payload", manifest_result)
             self.assertNotIn(
-                "MCP must not return this snapshot body",
+                "MCP explicit bounded snapshot body",
                 json.dumps(manifest_result, ensure_ascii=False),
             )
-            snapshot_pin = request(
+            snapshot_payload = request(
                 {
                     "jsonrpc": "2.0",
                     "id": 9,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "snapshot_read",
+                        "arguments": {
+                            "canvas_id": self.canvas_id,
+                            "event_id": captured["event_id"],
+                            "include_payload": True,
+                            "offset": 0,
+                            "max_bytes": 4096,
+                        },
+                    },
+                }
+            )
+            payload_result = snapshot_payload["result"]["structuredContent"]
+            self.assertIn("MCP explicit bounded snapshot body", payload_result["payload_chunk"])
+            self.assertTrue(payload_result["eof"])
+
+            reference_put = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 10,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "reference_put",
+                        "arguments": {
+                            "canvas_id": self.canvas_id,
+                            "summary": "MCP native reference",
+                            "content": "Native reference NEEDLE " * 128,
+                            "source": "mcp-parity-test",
+                        },
+                    },
+                }
+            )
+            stored_reference = reference_put["result"]["structuredContent"]
+            self.assertTrue(stored_reference["created"])
+            reference_read = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 11,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "reference_read",
+                        "arguments": {
+                            "canvas_id": self.canvas_id,
+                            "reference_id": stored_reference["reference_id"],
+                            "max_bytes": 128,
+                        },
+                    },
+                }
+            )
+            self.assertIn(
+                "Native reference NEEDLE",
+                reference_read["result"]["structuredContent"]["chunk"],
+            )
+            reference_search = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 12,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "reference_search",
+                        "arguments": {"canvas_id": self.canvas_id, "query": "needle"},
+                    },
+                }
+            )
+            self.assertEqual(
+                reference_search["result"]["structuredContent"]["hits"][0]["reference_id"],
+                stored_reference["reference_id"],
+            )
+            reference_delete = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 13,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "reference_delete",
+                        "arguments": {
+                            "canvas_id": self.canvas_id,
+                            "reference_id": stored_reference["reference_id"],
+                        },
+                    },
+                }
+            )
+            self.assertTrue(reference_delete["result"]["structuredContent"]["deleted"])
+            snapshot_pin = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 14,
                     "method": "tools/call",
                     "params": {
                         "name": "snapshot_pin",
@@ -1307,7 +1532,7 @@ class ContextCanvasTests(unittest.TestCase):
             snapshot_gc = request(
                 {
                     "jsonrpc": "2.0",
-                    "id": 10,
+                    "id": 15,
                     "method": "tools/call",
                     "params": {"name": "snapshot_gc", "arguments": {}},
                 }
@@ -2299,9 +2524,10 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         pins_root = self.root / "_snapshots" / "pins"
         self.assertFalse(pins_root.exists() and any(pins_root.rglob("*.json")))
 
-    def test_post_tool_hook_cli_captures_silently_and_fails_open(self) -> None:
+    def test_post_tool_hook_cli_requires_one_shot_opt_in_and_fails_open(self) -> None:
         payload = self.hook_payload(response={"text": "hook subprocess receipt"})
-        completed = subprocess.run(
+
+        unarmed = subprocess.run(
             [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
             input=json.dumps(payload),
             stdout=subprocess.PIPE,
@@ -2314,10 +2540,53 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
             check=False,
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
         )
-        self.assertEqual(completed.returncode, 0, completed.stderr)
-        self.assertEqual(completed.stdout, "")
+        self.assertEqual(unarmed.returncode, 0, unarmed.stderr)
+        self.assertEqual(unarmed.stdout, "")
+        self.assertEqual(self.snapshots.list_events(canvas_id=self.canvas_id)["events"], [])
+
+        armed = canvas.CaptureRequestStore(root=self.root).arm(
+            self.canvas_id,
+            tool_name="mcp__web__open",
+            retention_days=7,
+        )
+        self.assertTrue(armed["armed"])
+        captured = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+            input=json.dumps(payload),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        self.assertEqual(captured.returncode, 0, captured.stderr)
+        self.assertEqual(captured.stdout, "")
         listed = self.snapshots.list_events(canvas_id=self.canvas_id)
         self.assertEqual(len(listed["events"]), 1)
+
+        after_one_shot = self.hook_payload(
+            tool_use_id="call-after-one-shot",
+            response={"text": "must not be captured"},
+        )
+        completed = subprocess.run(
+            [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
+            input=json.dumps(after_one_shot),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=os.environ.copy(),
+            timeout=30,
+            check=False,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0) if os.name == "nt" else 0,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertEqual(len(self.snapshots.list_events(canvas_id=self.canvas_id)["events"]), 1)
 
         malformed = subprocess.run(
             [sys.executable, "-B", "-I", str(SCRIPT), "hook-post-tool-use"],
@@ -2335,6 +2604,42 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
         self.assertEqual(malformed.returncode, 0)
         self.assertEqual(malformed.stdout, "")
         self.assertIn("capture unavailable", malformed.stderr.lower())
+
+    def test_capture_request_matches_once_ignores_self_tools_and_can_expire_or_cancel(self) -> None:
+        requests = canvas.CaptureRequestStore(root=self.root)
+        now = datetime(2026, 8, 18, tzinfo=timezone.utc)
+        requests.arm(
+            self.canvas_id,
+            tool_name="mcp__web__open",
+            ttl_minutes=2,
+            now=now,
+        )
+
+        self_tool = requests.consume_for_hook(
+            self.hook_payload(tool_name="mcp__context_canvas__canvas_read"),
+            now=now,
+        )
+        self.assertEqual(self_tool["reason"], "self_tool")
+        mismatch = requests.consume_for_hook(
+            self.hook_payload(tool_name="mcp__web__search"),
+            now=now,
+        )
+        self.assertEqual(mismatch["reason"], "tool_mismatch")
+        matched = requests.consume_for_hook(self.hook_payload(), now=now)
+        self.assertTrue(matched["capture"])
+        self.assertEqual(
+            requests.consume_for_hook(self.hook_payload(), now=now)["reason"],
+            "not_armed",
+        )
+
+        requests.arm(self.canvas_id, tool_name="mcp__web__open", ttl_minutes=1, now=now)
+        expired = requests.consume_for_hook(
+            self.hook_payload(), now=now + timedelta(minutes=1)
+        )
+        self.assertEqual(expired["reason"], "expired")
+        requests.arm(self.canvas_id, tool_name="mcp__web__open", now=now)
+        self.assertTrue(requests.cancel(self.canvas_id)["cancelled"])
+        self.assertFalse(requests.cancel(self.canvas_id)["cancelled"])
 
     def test_oversize_hook_input_fails_open_without_partial_snapshot(self) -> None:
         payload = self.hook_payload(response={"text": "x" * 4096})
@@ -2424,7 +2729,11 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
             },
         )
 
-    def test_concurrent_hook_processes_dedupe_one_object_without_lost_events(self) -> None:
+    def test_concurrent_hook_processes_consume_one_capture_request_exactly_once(self) -> None:
+        canvas.CaptureRequestStore(root=self.root).arm(
+            self.canvas_id,
+            tool_name="mcp__web__open",
+        )
         processes: list[subprocess.Popen[str]] = []
         for index in range(4):
             payload = self.hook_payload(
@@ -2461,7 +2770,7 @@ class ContextCanvasSnapshotTests(unittest.TestCase):
             self.assertEqual(stdout, "")
             self.assertEqual(stderr, "")
         listed = self.snapshots.list_events(canvas_id=self.canvas_id, limit=10)
-        self.assertEqual(listed["count"], 4)
+        self.assertEqual(listed["count"], 1)
         self.assertEqual(len({event["sha256"] for event in listed["events"]}), 1)
         objects = list((self.root / "_snapshots" / "objects" / "sha256").rglob("*.json.gz"))
         self.assertEqual(len(objects), 1)

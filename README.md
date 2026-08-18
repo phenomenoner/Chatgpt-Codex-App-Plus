@@ -21,7 +21,7 @@
 Codex 很強，但真正順手的工作環境通常散落在個人設定、skills、PowerShell 工具與長期累積的操作規則裡。這個 repo 把其中可公開、可重用的部分整理成一套「Plus」層：
 
 - 工程技能不分叉：review、長跑監督、驗證與 incident workflows 統一指向獨立的 canonical toolkit，不再維護第二份副本。
-- 長任務接得回來：Context Canvas 把當前 session 身分、可明示延續的 semantic task lineage，以及依 sanitization policy 保存的歷史 tool snapshots 分開；重開時不再因 goal 換個說法就把工作卡死。
+- Session 工作看得清楚：Context Canvas 把 hook transport identity、可選的任務地圖、明示 offload 的可回取 references，以及一次性 opt-in 歷史 snapshot 分開；缺少 Canvas 不會把原本可做的工作卡住。
 - 分工有煞車：需要 subagent 時先做成本、獨立性與寫入所有權判斷。
 - 設定可重現：提供安全預設、全域 `AGENTS.md` 範例與可選安裝器。
 - 同步不洩密：只有 manifest allow-list 內的檔案能進 repo；任何憑證、私有路徑或未知檔案都會 fail closed。
@@ -30,7 +30,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 
 | Component | 解決什麼問題 | 發佈方式 |
 |---|---|---|
-| `context-canvas-codex` | 本機 semantic task lineage、跨 session 明示延續、最近任務／snapshot 篩選查找、hash-bound evidence，以及 content-addressed、deduplicated、TTL/pin 管理的 sanitized tool snapshots | 內含 plugin、選配 |
+| `context-canvas-codex` | 可選的 session 任務導航、跨 session 明示延續、可搜尋／分段回取的文字 references，以及 default-off、一次性 opt-in 的 sanitized tool snapshots | 內含 plugin、選配 |
 | `smart-agentic-engineering-toolkit` | 16 個工程 skills，涵蓋 first-principles planning、specification、review、測試、delegation、recovery 與 release evidence | [canonical repo，版本鎖定 pointer](https://github.com/phenomenoner/smart-agentic-engineering-toolkit) |
 | `operate-a2a-superhub` | A2A Superhub 的 bounded operation 與診斷流程 | 內含、選配 |
 | `baton-fanout-skill` | Codex subagent dispatch brake、Luna/max bounded codegen route 與相對 working lane 的 review floor | [Codex 專用 branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing) |
@@ -75,8 +75,10 @@ python -I plugins/context-canvas-codex/scripts/install_context_canvas_hook.py ch
 ```
 
 接著在 Codex CLI 用 `/hooks` 檢查並信任三個定義。若目前 task 的下一個 prompt
-收到 opaque ID，代表這個版本有載入 `UserPromptSubmit`；再開一個全新 task，重驗
-`SessionStart` ID，並做一次 harmless tool call，確認 `_snapshots/events` 出現新的 manifest。
+收到 opaque ID，代表這個版本有載入 `UserPromptSubmit`；缺少 ID 只代表 Canvas
+能力不可用，不會阻塞原任務。若要驗證 capture，再開一個全新 task 重驗
+`SessionStart` ID，先用 `snapshot_capture_next` 指定下一個 harmless tool call，
+再確認 `_snapshots/events` 出現且只出現該次 request 的新 manifest。
 Codex CLI 0.146.0 的先前本機實測是
 plugin MCP/skill 會載入、plugin-bundled hook 卻未執行；這個顯式 installer
 就是相容層，並會保留既有 hooks 與 hash-addressed backup。安裝、catalog
@@ -117,13 +119,13 @@ Codex 的 personal config、project config 與命令列 override 有明確優先
 
 ## Context Canvas 的分層
 
-0.4 先把三件事拆開：hook-derived opaque ID 只代表目前 execution；semantic map 以 lineage 保存；tool result 則留在 snapshot cache。錯過 startup hook 時，後續 `UserPromptSubmit` 可補回目前 ID。`canvas_start` 對同 ID 的文字差異只回報 conflict、不覆寫也不阻塞；跨 session 要用 `canvas_continue` 明示前身，後繼會保存 stable lineage 與 canonical predecessor SHA-256。Goal 只有 active/completed/abandoned，卡點另建 blocker node。`canvas_list --limit 8` 依最近更新列出前後繼、blocker 數與可否延續，不用再拿 opaque ID 猜時間順序。
+0.5 把四件事拆開：hook-derived opaque ID 只是 Canvas transport provenance；session map 提供目標、決策、進度、依賴、阻塞與下一步導航；大型文字結果用 `reference_put/search/read/delete` 明示 offload 與分段回取；歷史 tool payload 只有先呼叫 `snapshot_capture_next` 才保存下一個匹配 callback。Canvas 不是 source of truth、授權系統、WAL、release gate 或 workflow engine，缺少 identity、map 或 lineage 不會阻塞工作。`canvas_start` 只在導航或 offload 有具體價值時建立；同 ID 的文字差異只回報 conflict、不覆寫，跨 session 延續仍用 `canvas_continue` 明示前身以保留 v3 相容性。
 
-保存面不把「完整 tool result」和「建立 semantic node」綁在一起。對 Codex 實際送出的、已 opt-in `PostToolUse` callback payload，會保存 hook 收到的完整 model-facing payload（依宣告 policy sanitization，超過上限則整筆跳過而不截斷），以 SHA-256＋deterministic gzip 做 dedupe。Sanitizer 會用同一套 suffix-aware 規則處理 structured key、文字 assignment、percent/form query key、bracket/index notation、JSON Unicode escape 與 escaped wrapper；任何 malformed-percent assignment key 都採保守遮罩，而且前面已找到一個值也不會停止後續 encoded／escaped representation passes，但仍保留相鄰的安全 query parameters。支援的 base64／percent-encoded textual data URL（含未加引號的 MIME parameters）會 canonicalize、decode、redact；不能安全解析的 `data:` 會讓整筆 observation 不落盤。其他圖片、影音與任意 binary 會原樣保存並明示標成 `opaque-uninspected`，不是已掃過 secret 的 sealed raw evidence。一般 snapshot 預設 14 天 TTL，GC 會重算 journal plan ID、驗證唯一且有序的 event/object/blob identities，再從目前已驗證狀態決定中斷後剩餘工作；被 finding／decision／verification 引用時，會先驗證所有 transitive blobs 再 pin。`snapshot_list` 可依 tool、capture status、pin state 與 cursor 分頁；body 仍不進 Canvas search、lifecycle injection、closeout 或 MCP 回應，完整回查只能用明示 CLI export。
+明示 reference 會先套用文字 redaction，再以 bounded UTF-8 chunks 原生回取；它是歷史資料，若要做 current-state claim 仍需重查 live source。Snapshot capture 預設關閉；armed request 有 expiry、只消耗一次、精確 tool mismatch 不會消耗，Canvas 自己的工具也會被忽略。匹配時保存 hook 收到的完整 model-facing payload（依宣告 policy sanitization，超過上限則整筆跳過而不截斷），並以 SHA-256＋deterministic gzip 做 dedupe。Sanitizer 與既有 TTL、pin、transitive blob 驗證及 GC 相容行為保留。`snapshot_list` 回傳 manifest；`snapshot_read(include_payload=true)` 可明示讀取 bounded chunks，完整本機檔案 export 仍走 CLI。
 
-目前 Codex 會在支援的 handler 回傳已 opt-in post-tool payload 時呼叫 `PostToolUse`；Bash 即使 non-zero exit 仍可能有 callback 與 exit metadata 可保存。若 dispatch／handler failure 沒產生 callback payload，就不會進 archive，而且此 adapter 沒有另一個 failure sibling 可補抓。安裝後應在全新 task 做 harmless tool call，實際檢查新 manifest；不能只看 plugin catalog 或設定檔就推論 capture 已生效。
+目前 Codex 會在支援的 handler 回傳已 opt-in post-tool payload 時呼叫 `PostToolUse`；這是 host transport surface，不是 Canvas 的自動保存規則。Bash 即使 non-zero exit 仍可能有 callback；dispatch／handler failure 若沒有 callback payload 就無法保存。安裝後應在全新 task 先 arm 一次 harmless exact tool call，再檢查新 manifest；不能只看 plugin catalog 或設定檔推論 capture 已生效。
 
-repo 內附 machine-readable benchmark，涵蓋 persistent MCP read、fresh CLI、首次 snapshot write、warm dedupe、manifest read、exact GC preview，以及 cold small／large `PostToolUse` hook。GC 會驗證 event/object/blob graph 並找出 orphan，不能拿只計數的舊 preview 直接相比；數字也會受 Python、ACL、儲存、防毒、同機負載與 payload shape 影響。比較或發布結果時，必須連同同一 receipt 的 executable hashes 與環境一起看。
+repo 內附 machine-readable benchmark，涵蓋 persistent MCP read、fresh CLI、snapshot store write、warm dedupe、manifest read、exact GC preview，以及 cold small／large hook。直接 store-write 的量測不代表產品預設會 capture。GC 會驗證 event/object/blob graph 並找出 orphan；數字也會受 Python、ACL、儲存、防毒、同機負載與 payload shape 影響。
 
 非互動 CLI 若採 `approval_policy = "never"`，需要核准的 MCP call 會被取消，
 不是自動放行。驗收時必須明確設定已審過的 plugin-scoped MCP approval

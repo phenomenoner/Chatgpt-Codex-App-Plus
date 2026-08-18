@@ -12,7 +12,7 @@
 
 ## Optional Context Canvas
 
-- Treat Context Canvas as a semantic map and snapshot index, not permission to work. A missing hook identity or uninitialized canvas must not block an otherwise authorized task.
+- Treat Context Canvas as an optional semantic map and explicit context-offload layer, not permission to work, a WAL, or a workflow gate. A missing hook identity or uninitialized canvas must not block an otherwise authorized task.
 - Use only a trusted hook-injected opaque identity. Continue without Canvas when it is unavailable; use explicit lineage when a new session should inherit an old map.
 
 ## Evidence-driven development

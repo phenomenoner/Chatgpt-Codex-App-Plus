@@ -11,7 +11,7 @@
         "Codex SessionStart, UserPromptSubmit, and PostToolUse through native plugin hooks or the explicit user-hook adapter",
         "Python 3.11+ available as python"
       ],
-      "summary": "Keep hook-derived session identity separate from a continuable semantic task lineage and complete policy-sanitized, content-addressed historical tool snapshots with filtered lookup, dedupe, TTL, pinning, bounded MCP metadata, and explicit CLI export."
+      "summary": "Provide an optional session task map, explicit searchable and chunk-readable text references, and default-off one-shot historical tool snapshots. Hook identity is transport provenance only; missing Canvas state never blocks the underlying task."
     },
     {
       "id": "smart-agentic-engineering-toolkit",

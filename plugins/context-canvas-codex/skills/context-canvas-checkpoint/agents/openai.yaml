@@ -1,4 +1,4 @@
 interface:
-  display_name: "Context Canvas Checkpoint"
-  short_description: "Checkpoint long tool calls and durable task state"
-  default_prompt: "Use $context-canvas-checkpoint to initialize or restore this task's compact evidence-backed map, including automatic initialization before any tool call expected to exceed five minutes; if hook identity is missing, remind the user to check first-install manual approval in /hooks."
+  display_name: "Context Canvas"
+  short_description: "Navigate session work and offload retrievable context"
+  default_prompt: "Use $context-canvas-checkpoint when an optional task map, explicit reference, or one-shot historical capture would improve navigation or long-context offload. Missing Canvas state or hook identity does not block the underlying task. For activation diagnosis, manual approval of newly installed hooks may be required; inspect /hooks."

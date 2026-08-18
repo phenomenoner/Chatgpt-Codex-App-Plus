@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Install Context Canvas lifecycle and snapshot adapters as Codex user hooks.
+"""Install optional Context Canvas binding and capture adapters as Codex user hooks.
 
 Some Codex releases expose plugin MCP servers and skills while not executing
 plugin-bundled lifecycle hooks. This installer keeps the same audited hook code
-in a stable user-level location and merges the exact lifecycle and capture
-handlers into hooks.json.
+in a stable user-level location and merges the exact binding and one-shot
+capture handlers into hooks.json. PostToolUse persistence remains off unless an
+explicit capture request is armed.
 """
 
 from __future__ import annotations
@@ -28,9 +29,9 @@ INSTALL_DIR_NAME = "context-canvas-codex"
 INSTALLED_SCRIPT_NAME = "context_canvas.py"
 INSTALL_MANIFEST_NAME = "hook-install.json"
 HOOKS_FILE_NAME = "hooks.json"
-SESSION_STATUS_MESSAGE = "Restoring Context Canvas [context-canvas-codex user hook]"
-TURN_STATUS_MESSAGE = "Refreshing Context Canvas identity [context-canvas-codex user hook]"
-SNAPSHOT_STATUS_MESSAGE = "Archiving tool snapshot [context-canvas-codex user hook]"
+SESSION_STATUS_MESSAGE = "Restoring optional Context Canvas map [context-canvas-codex user hook]"
+TURN_STATUS_MESSAGE = "Refreshing optional Canvas binding [context-canvas-codex user hook]"
+SNAPSHOT_STATUS_MESSAGE = "Checking explicit Canvas capture request [context-canvas-codex user hook]"
 SESSION_MATCHER = "^(startup|resume|clear|compact)$"
 POST_TOOL_MATCHER = ".*"
 MANAGED_EVENTS = ("SessionStart", "UserPromptSubmit", "PostToolUse")
