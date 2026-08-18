@@ -95,6 +95,11 @@ MAX_REFERENCE_MANIFEST_BYTES = 64 * 1024
 # the 1 MiB message ceiling even when every input byte requires JSON escaping.
 MAX_REFERENCE_READ_BYTES = 48 * 1024
 DEFAULT_REFERENCE_READ_BYTES = 16 * 1024
+MIN_REFERENCE_PREVIEW_BYTES = 1024
+DEFAULT_REFERENCE_PREVIEW_BYTES = 8 * 1024
+MAX_REFERENCE_PREVIEW_BYTES = 24 * 1024
+MAX_REFERENCE_PREVIEW_SEGMENTS = 24
+MAX_REFERENCE_PREVIEW_CANDIDATES = 256
 MAX_REFERENCE_LIST_LIMIT = 100
 MAX_REFERENCES_PER_CANVAS = 1_000
 MAX_REFERENCE_SEARCH_SCAN_BYTES = 16 * 1024 * 1024
@@ -113,6 +118,7 @@ REFERENCE_SOURCE_RECEIPT_SCHEMA = (
     "context-canvas-codex.reference-source-receipt.v1"
 )
 REFERENCE_MATCH_RANGE_SCHEMA = "context-canvas-codex.reference-match-range.v1"
+REFERENCE_PREVIEW_LENSES = frozenset({"log-v1", "search-results-v1"})
 CAPTURE_REQUEST_SCHEMA = "context-canvas-codex.capture-request.v1"
 BOOTSTRAP_LOCK_NAME = ".context-canvas-codex.bootstrap.lock"
 SNAPSHOT_CONTENT_POLICIES = frozenset({"text-redacted", "opaque-uninspected"})
@@ -129,6 +135,58 @@ SNAPSHOT_TEXTUAL_MEDIA_TYPES = frozenset(
         "application/xml",
         "image/svg+xml",
     }
+)
+
+REFERENCE_LOG_ERROR_RE = re.compile(
+    r"\b(?:error|fatal|panic|exception|traceback|fail(?:ed|ure)?|"
+    r"assert(?:ion(?:error)?|ed)?)\b",
+    re.IGNORECASE,
+)
+REFERENCE_LOG_WARNING_RE = re.compile(r"\bwarn(?:ing)?\b", re.IGNORECASE)
+REFERENCE_LOG_STACK_RE = re.compile(
+    r"^(?:\x1b\[[0-9;?]*[ -/]*[@-~])*\s+(?:at\b|File\b|line\s+\d+\b|"
+    r"Caused by\b|raise\b|\^|\d+:)",
+    re.IGNORECASE,
+)
+REFERENCE_WINDOWS_SEARCH_ROW_RE = re.compile(
+    r"^(?P<path>[A-Za-z]:[\\/][^:\r\n]*):(?P<line>[1-9][0-9]*)"
+    r"(?::(?P<column>[1-9][0-9]*))?:(?P<content>[^\r\n]*)$"
+)
+REFERENCE_PORTABLE_SEARCH_ROW_RE = re.compile(
+    r"^(?P<path>[^:\r\n]+):(?P<line>[1-9][0-9]*)"
+    r"(?::(?P<column>[1-9][0-9]*))?:(?P<content>[^\r\n]*)$"
+)
+REFERENCE_PREVIEW_REASON_ORDER = {
+    "query": 0,
+    "error": 1,
+    "stack": 2,
+    "context": 3,
+    "warning": 4,
+    "first_file_hit": 5,
+    "first": 6,
+    "last": 7,
+}
+REFERENCE_PREVIEW_REASON_PRIORITY = {
+    "query": 0,
+    "error": 0,
+    "stack": 1,
+    "context": 1,
+    "first_file_hit": 0,
+    "warning": 2,
+    "first": 3,
+    "last": 3,
+}
+REFERENCE_LINE_ENDINGS = (
+    "\n",
+    "\r",
+    "\v",
+    "\f",
+    "\x1c",
+    "\x1d",
+    "\x1e",
+    "\x85",
+    "\u2028",
+    "\u2029",
 )
 
 SECRET_PATTERNS = (
@@ -1728,7 +1786,10 @@ def _reference_match_read_hint(
     match_end_byte: int,
 ) -> dict[str, Any]:
     suggested_offset = max(0, match_start_byte - 2_048)
-    while suggested_offset < match_start_byte and raw[suggested_offset] & 0xC0 == 0x80:
+    while (
+        suggested_offset < match_start_byte
+        and raw[suggested_offset] & 0xC0 == 0x80
+    ):
         suggested_offset += 1
     suggested_max_bytes = min(
         MAX_REFERENCE_READ_BYTES,
@@ -1744,6 +1805,263 @@ def _reference_match_read_hint(
         "basis": "unicode_casefold_v1",
         "unicode_version": unicodedata.unidata_version,
     }
+
+
+def _reference_line_ranges(value: str) -> list[dict[str, Any]]:
+    lines = value.splitlines(keepends=True)
+    if not lines:
+        lines = [value]
+    result: list[dict[str, Any]] = []
+    byte_cursor = 0
+    for text in lines:
+        next_byte = byte_cursor + len(text.encode("utf-8"))
+        result.append(
+            {"start_byte": byte_cursor, "end_byte": next_byte, "text": text}
+        )
+        byte_cursor = next_byte
+    if byte_cursor != len(value.encode("utf-8")):
+        raise CanvasError("reference line index did not preserve source bytes")
+    return result
+
+
+def _ordered_preview_reasons(reasons: set[str]) -> list[str]:
+    return sorted(
+        reasons,
+        key=lambda reason: (REFERENCE_PREVIEW_REASON_ORDER[reason], reason),
+    )
+
+
+def _log_preview_candidates(
+    content: str, query: str | None
+) -> tuple[list[dict[str, Any]], str | None]:
+    lines = _reference_line_ranges(content)
+    reasons_by_line: dict[int, set[str]] = {}
+    high_priority_lines: set[int] = set()
+    error_lines: set[int] = set()
+
+    def add_reason(index: int, reason: str) -> None:
+        reasons_by_line.setdefault(index, set()).add(reason)
+
+    folded_query = query.casefold() if query is not None else None
+    for index, line in enumerate(lines):
+        text = line["text"]
+        if folded_query is not None and folded_query in text.casefold():
+            add_reason(index, "query")
+            high_priority_lines.add(index)
+        if REFERENCE_LOG_ERROR_RE.search(text):
+            add_reason(index, "error")
+            high_priority_lines.add(index)
+            error_lines.add(index)
+        if REFERENCE_LOG_WARNING_RE.search(text):
+            add_reason(index, "warning")
+
+    structured = len(lines) > 1 or any(
+        line["text"].endswith(REFERENCE_LINE_ENDINGS) for line in lines
+    )
+    if structured:
+        add_reason(0, "first")
+        add_reason(len(lines) - 1, "last")
+    for index in high_priority_lines:
+        if index > 0:
+            add_reason(index - 1, "context")
+        if index + 1 < len(lines):
+            add_reason(index + 1, "context")
+    for index in error_lines:
+        for stack_index in range(index + 1, min(len(lines), index + 9)):
+            if not REFERENCE_LOG_STACK_RE.search(lines[stack_index]["text"]):
+                break
+            add_reason(stack_index, "stack")
+
+    if not reasons_by_line:
+        return [], "no_signal"
+    candidates: list[dict[str, Any]] = []
+    for index, reasons in reasons_by_line.items():
+        line = lines[index]
+        candidates.append(
+            {
+                "start_byte": line["start_byte"],
+                "end_byte": line["end_byte"],
+                "reasons": _ordered_preview_reasons(reasons),
+                "priority": min(
+                    REFERENCE_PREVIEW_REASON_PRIORITY[reason] for reason in reasons
+                ),
+            }
+        )
+    candidates.sort(key=lambda item: (item["priority"], item["start_byte"]))
+    return candidates, None
+
+
+def _search_row_body(value: str) -> str:
+    for ending in ("\r\n", "\n", "\r"):
+        if value.endswith(ending):
+            return value[: -len(ending)]
+    return value
+
+
+def _search_results_preview_candidates(
+    content: str, query: str
+) -> tuple[list[dict[str, Any]], str | None]:
+    rows: list[dict[str, Any]] = []
+    parseable_count = 0
+    folded_query = query.casefold()
+    for line in _reference_line_ranges(content):
+        body = _search_row_body(line["text"])
+        match = REFERENCE_WINDOWS_SEARCH_ROW_RE.fullmatch(body)
+        if match is None:
+            match = REFERENCE_PORTABLE_SEARCH_ROW_RE.fullmatch(body)
+        if match is None:
+            continue
+        parseable_count += 1
+        if folded_query not in match.group("content").casefold():
+            continue
+        rows.append(
+            {
+                "path": match.group("path"),
+                "start_byte": line["start_byte"],
+                "end_byte": line["end_byte"],
+            }
+        )
+    if parseable_count == 0:
+        return [], "unsupported_format"
+    if not rows:
+        return [], "no_signal"
+
+    first_by_file: list[dict[str, Any]] = []
+    remaining: list[dict[str, Any]] = []
+    seen_paths: set[str] = set()
+    for row in rows:
+        if row["path"] in seen_paths:
+            row["first_file_hit"] = False
+            remaining.append(row)
+        else:
+            seen_paths.add(row["path"])
+            row["first_file_hit"] = True
+            first_by_file.append(row)
+    candidates: list[dict[str, Any]] = []
+    for row in first_by_file + remaining:
+        reasons = {"query"}
+        if row["first_file_hit"]:
+            reasons.add("first_file_hit")
+        candidates.append(
+            {
+                "start_byte": row["start_byte"],
+                "end_byte": row["end_byte"],
+                "reasons": _ordered_preview_reasons(reasons),
+                "priority": 0,
+            }
+        )
+    return candidates, None
+
+
+def _merge_preview_segments(
+    raw: bytes, candidates: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    merged: list[dict[str, Any]] = []
+    for candidate in sorted(candidates, key=lambda item: item["start_byte"]):
+        reasons = set(candidate["reasons"])
+        if merged and candidate["start_byte"] <= merged[-1]["end_byte"]:
+            merged[-1]["end_byte"] = max(
+                merged[-1]["end_byte"], candidate["end_byte"]
+            )
+            merged[-1]["reasons"] = _ordered_preview_reasons(
+                set(merged[-1]["reasons"]) | reasons
+            )
+            continue
+        merged.append(
+            {
+                "start_byte": candidate["start_byte"],
+                "end_byte": candidate["end_byte"],
+                "reasons": _ordered_preview_reasons(reasons),
+            }
+        )
+    for segment in merged:
+        segment["text"] = raw[
+            segment["start_byte"] : segment["end_byte"]
+        ].decode("utf-8")
+    return merged
+
+
+def _preview_omitted_ranges(
+    total_bytes: int, segments: list[dict[str, Any]]
+) -> list[dict[str, int]]:
+    result: list[dict[str, int]] = []
+    cursor = 0
+    for segment in segments:
+        if cursor < segment["start_byte"]:
+            result.append({"start_byte": cursor, "end_byte": segment["start_byte"]})
+        cursor = segment["end_byte"]
+    if cursor < total_bytes:
+        result.append({"start_byte": cursor, "end_byte": total_bytes})
+    return result
+
+
+def _finalize_preview_size(result: dict[str, Any]) -> dict[str, Any]:
+    result["serialized_bytes"] = 0
+    for _ in range(8):
+        actual = len(_canonical_snapshot_bytes(result))
+        if actual == result["serialized_bytes"]:
+            return result
+        result["serialized_bytes"] = actual
+    raise CanvasError("reference preview size did not converge")
+
+
+def _reference_preview_result(
+    manifest: dict[str, Any],
+    *,
+    total_bytes: int,
+    lens: str,
+    status: str,
+    segments: list[dict[str, Any]],
+    ordinary_chunk_serialized_bytes: int,
+    fallback_reason: str | None,
+) -> dict[str, Any]:
+    selected_bytes = sum(
+        segment["end_byte"] - segment["start_byte"] for segment in segments
+    )
+    lens_name, _, version_text = lens.rpartition("-v")
+    return _finalize_preview_size(
+        {
+            "ok": True,
+            "status": status,
+            "source": _reference_source_receipt(
+                manifest, total_bytes=total_bytes
+            ),
+            "lens": {"name": lens_name, "version": int(version_text)},
+            "segments": segments,
+            "omitted_ranges": _preview_omitted_ranges(total_bytes, segments),
+            "selected_bytes": selected_bytes,
+            "omitted_bytes": total_bytes - selected_bytes,
+            "serialized_bytes": 0,
+            "ordinary_chunk_serialized_bytes": ordinary_chunk_serialized_bytes,
+            "fallback_reason": fallback_reason,
+            "trust": manifest["trust"],
+            "requires_revalidation": manifest["requires_revalidation"],
+        }
+    )
+
+
+def _ordinary_reference_serialized_bytes(
+    manifest: dict[str, Any], raw: bytes, *, max_bytes: int
+) -> int:
+    chunk, next_offset = _bounded_utf8_chunk(
+        raw,
+        offset=0,
+        max_bytes=min(max_bytes, MAX_REFERENCE_READ_BYTES),
+        label="reference read",
+    )
+    return len(
+        _canonical_snapshot_bytes(
+            {
+                "ok": True,
+                "reference": manifest,
+                "offset": 0,
+                "next_offset": next_offset,
+                "total_bytes": len(raw),
+                "eof": next_offset is None,
+                "chunk": chunk,
+            }
+        )
+    )
 
 
 def _is_context_canvas_tool(tool_name: str) -> bool:
@@ -2220,6 +2538,116 @@ class ReferenceStore:
                 "skipped": skipped,
                 "skipped_count": len(skipped),
             }
+
+    def preview(
+        self,
+        canvas_id: str,
+        reference_id: str,
+        *,
+        lens: str,
+        query: str | None = None,
+        max_output_bytes: int = DEFAULT_REFERENCE_PREVIEW_BYTES,
+    ) -> dict[str, Any]:
+        canvas_id = _validated_canvas_id(canvas_id)
+        reference_id = _validated_reference_id(reference_id)
+        if not isinstance(lens, str) or lens not in REFERENCE_PREVIEW_LENSES:
+            raise CanvasError("reference preview lens is invalid")
+        if query is not None:
+            query = _validated_text(
+                "reference preview query", query, MAX_SEARCH_QUERY_CHARS
+            )
+        if lens == "search-results-v1" and query is None:
+            raise CanvasError("reference preview query is required for this lens")
+        if (
+            not isinstance(max_output_bytes, int)
+            or isinstance(max_output_bytes, bool)
+            or not MIN_REFERENCE_PREVIEW_BYTES
+            <= max_output_bytes
+            <= MAX_REFERENCE_PREVIEW_BYTES
+        ):
+            raise CanvasError("reference preview budget is invalid")
+
+        with self._locked(create=False) as reference_root:
+            if reference_root is None:
+                raise CanvasError("reference store is empty")
+            entry_path = self._entry_path(
+                reference_root, canvas_id, reference_id, create=False
+            )
+            if entry_path is None or not _lexists(entry_path):
+                raise CanvasError("reference was not found")
+            manifest = self._load_manifest_unlocked(
+                entry_path,
+                expected_canvas_id=canvas_id,
+                expected_reference_id=reference_id,
+            )
+            raw = self._read_content_unlocked(reference_root, manifest)
+
+        ordinary_size = _ordinary_reference_serialized_bytes(
+            manifest, raw, max_bytes=max_output_bytes
+        )
+
+        def fallback(status: str, reason: str) -> dict[str, Any]:
+            result = _reference_preview_result(
+                manifest,
+                total_bytes=len(raw),
+                lens=lens,
+                status=status,
+                segments=[],
+                ordinary_chunk_serialized_bytes=ordinary_size,
+                fallback_reason=reason,
+            )
+            if result["serialized_bytes"] > max_output_bytes:
+                raise CanvasError(
+                    "reference preview budget is too small for bounded metadata"
+                )
+            return result
+
+        if len(raw) <= max_output_bytes:
+            return fallback("not_needed", "full_body_fits_ordinary_read")
+
+        content = raw.decode("utf-8")
+        if lens == "log-v1":
+            candidates, empty_status = _log_preview_candidates(content, query)
+        else:
+            assert query is not None
+            candidates, empty_status = _search_results_preview_candidates(
+                content, query
+            )
+        if empty_status is not None:
+            reason = (
+                "search_results_format_not_supported"
+                if empty_status == "unsupported_format"
+                else "lens_found_no_signal"
+            )
+            return fallback(empty_status, reason)
+
+        selected: list[dict[str, Any]] = []
+        best: dict[str, Any] | None = None
+        for candidate in candidates[:MAX_REFERENCE_PREVIEW_CANDIDATES]:
+            trial = selected + [candidate]
+            segments = _merge_preview_segments(raw, trial)
+            if len(segments) > MAX_REFERENCE_PREVIEW_SEGMENTS:
+                continue
+            result = _reference_preview_result(
+                manifest,
+                total_bytes=len(raw),
+                lens=lens,
+                status="preview",
+                segments=segments,
+                ordinary_chunk_serialized_bytes=ordinary_size,
+                fallback_reason=None,
+            )
+            if (
+                result["serialized_bytes"] <= max_output_bytes
+                and result["serialized_bytes"] < ordinary_size
+            ):
+                selected = trial
+                best = result
+        if best is not None:
+            return best
+        return fallback(
+            "not_smaller", "candidate_exceeds_budget_or_ordinary_read"
+        )
 
     def delete(self, canvas_id: str, reference_id: str) -> dict[str, Any]:
         canvas_id = _validated_canvas_id(canvas_id)
@@ -4691,7 +5119,9 @@ def _snapshot_hook_input_limit() -> int:
 
 
 def _emit(payload: Any) -> None:
-    sys.stdout.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    sys.stdout.buffer.write(encoded + b"\n")
+    sys.stdout.buffer.flush()
 
 
 def _paired_evidence_refs(pointers: list[str], hashes: list[str]) -> list[dict[str, str]]:
@@ -4809,6 +5239,20 @@ def build_parser() -> argparse.ArgumentParser:
     reference_search.add_argument("query")
     reference_search.add_argument("--canvas-id", required=True)
     reference_search.add_argument("--limit", type=int, default=10)
+
+    reference_preview = subparsers.add_parser(
+        "reference-preview",
+        help="derive one explicit deterministic exact-slice preview",
+    )
+    reference_preview.add_argument("--canvas-id", required=True)
+    reference_preview.add_argument("--reference-id", required=True)
+    reference_preview.add_argument(
+        "--lens", choices=sorted(REFERENCE_PREVIEW_LENSES), required=True
+    )
+    reference_preview.add_argument("--query")
+    reference_preview.add_argument(
+        "--max-output-bytes", type=int, default=DEFAULT_REFERENCE_PREVIEW_BYTES
+    )
 
     reference_delete = subparsers.add_parser(
         "reference-delete", help="delete one explicit managed reference"
@@ -5009,6 +5453,14 @@ def main(argv: list[str] | None = None) -> int:
             elif args.command == "reference-search":
                 result = references.search(
                     args.canvas_id, args.query, limit=args.limit
+                )
+            elif args.command == "reference-preview":
+                result = references.preview(
+                    args.canvas_id,
+                    args.reference_id,
+                    lens=args.lens,
+                    query=args.query,
+                    max_output_bytes=args.max_output_bytes,
                 )
             elif args.command == "reference-delete":
                 result = references.delete(args.canvas_id, args.reference_id)

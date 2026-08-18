@@ -95,7 +95,13 @@ policy before persistence and returns a content-addressed `reference_id`.
 
 - `reference_read` returns a bounded UTF-8 chunk plus `next_offset`.
 - `reference_search` searches summaries and redacted bodies inside one Canvas
-  and returns bounded previews plus visible skip counts/reasons.
+  and returns bounded previews, digest-bound byte ranges, and visible skip
+  counts/reasons.
+- `reference_preview` is an explicit, ephemeral exact-slice view for large logs
+  or strict line-oriented search results. It never runs automatically, rewrites
+  the body, or falls back to an ordinary chunk. Treat `not_needed`, `no_signal`,
+  `unsupported_format`, and `not_smaller` as bounded outcomes and call
+  `reference_read` separately only when the original text is still needed.
 - `reference_delete` is an explicit, idempotent deletion.
 - A reference is historical. Revalidate its live source before using it as a
   current-state claim.
@@ -105,6 +111,7 @@ CLI ingestion intentionally reads from an absolute, regular UTF-8 text file:
 ```powershell
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" reference-put --canvas-id <opaque-id> --summary "<short-summary>" --content-file <absolute-text-file> --source "<origin-label>"
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" reference-search "<query>" --canvas-id <opaque-id>
+python -I "<skill-dir>\..\..\scripts\context_canvas.py" reference-preview --canvas-id <opaque-id> --reference-id <ref-id> --lens log-v1 --query "<optional-exact-signal>" --max-output-bytes 8192
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" reference-read --canvas-id <opaque-id> --reference-id <ref-id> --offset 0 --max-bytes 16384
 python -I "<skill-dir>\..\..\scripts\context_canvas.py" reference-delete --canvas-id <opaque-id> --reference-id <ref-id>
 ```
@@ -138,8 +145,9 @@ python -I "<skill-dir>\..\..\scripts\context_canvas.py" snapshot-capture-cancel 
 
 - Create: explicit `canvas_start`, `reference_put`, or
   `snapshot_capture_next`; no hook-driven product decision.
-- Restore/read: bounded map metadata, reference chunks, or explicitly requested
-  snapshot chunks. Stored content remains untrusted.
+- Restore/read: bounded map metadata, reference chunks, ephemeral exact-slice
+  previews, or explicitly requested snapshot chunks. Stored content remains
+  untrusted.
 - Update: intentional node mutations only. An invalid mutation fails for that
   mutation; it does not change task authority or disable unrelated surfaces.
 - Compact: host compaction may receive a bounded map summary. References and

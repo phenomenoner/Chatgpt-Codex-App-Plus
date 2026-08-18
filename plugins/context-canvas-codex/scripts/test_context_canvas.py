@@ -376,6 +376,12 @@ class ContextCanvasTests(unittest.TestCase):
             references.search(self.canvas_id, "body-only-range-token")["hits"],
             [],
         )
+        with self.assertRaisesRegex(canvas.CanvasError, "not found"):
+            references.preview(
+                self.canvas_id,
+                stored["reference_id"],
+                lens="log-v1",
+            )
         with mock.patch.object(
             canvas,
             "MAX_REFERENCE_SEARCH_SCAN_BYTES",
@@ -388,6 +394,242 @@ class ContextCanvasTests(unittest.TestCase):
             limited["skipped"],
             [{"reference_id": stored["reference_id"], "reason": "scan_limit"}],
         )
+
+    def test_reference_log_preview_is_exact_deterministic_and_ephemeral(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        content = (
+            "BOOT sequence\r\n"
+            + "ordinary noise line\n" * 180
+            + "query context before\r\n"
+            + "Exact Probe reached 🙂\r\n"
+            + "\x1b[31mERROR\x1b[0m worker failed\r\n"
+            + '  File "worker.py", line 7, in run\r\n'
+            + "    raise RuntimeError('boom')\r\n"
+            + "WARNING retry is disabled\n"
+            + "ordinary tail noise\r\n" * 120
+            + "SHUTDOWN complete\n"
+        )
+        stored = references.put(
+            self.canvas_id,
+            summary="Deterministic log lens fixture",
+            content=content,
+        )
+        raw = content.encode("utf-8")
+
+        def data_tree() -> list[tuple[str, str]]:
+            return [
+                (
+                    path.relative_to(self.root).as_posix(),
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                )
+                for path in sorted(self.root.rglob("*"))
+                if path.is_file()
+            ]
+
+        before = data_tree()
+        first = references.preview(
+            self.canvas_id,
+            stored["reference_id"],
+            lens="log-v1",
+            query="Exact Probe",
+            max_output_bytes=4096,
+        )
+        second = references.preview(
+            self.canvas_id,
+            stored["reference_id"],
+            lens="log-v1",
+            query="Exact Probe",
+            max_output_bytes=4096,
+        )
+
+        self.assertEqual(first, second)
+        self.assertEqual(before, data_tree(), "preview must not persist derived state")
+        self.assertEqual(first["status"], "preview")
+        self.assertEqual(first["lens"], {"name": "log", "version": 1})
+        self.assertEqual(
+            first["source"]["content_sha256"], stored["content_sha256"]
+        )
+        self.assertLessEqual(len(first["segments"]), 24)
+        self.assertNotIn("preview", first, "segments are the only preview payload")
+        self.assertEqual(
+            first["serialized_bytes"], len(canvas._canonical_snapshot_bytes(first))
+        )
+        self.assertLessEqual(first["serialized_bytes"], 4096)
+        self.assertLess(
+            first["serialized_bytes"], first["ordinary_chunk_serialized_bytes"]
+        )
+        ordinary_same_budget = references.read(
+            self.canvas_id,
+            stored["reference_id"],
+            max_bytes=4096,
+        )
+        self.assertEqual(
+            first["ordinary_chunk_serialized_bytes"],
+            len(canvas._canonical_snapshot_bytes(ordinary_same_budget)),
+        )
+
+        reason_set: set[str] = set()
+        selected_bytes = 0
+        coverage: list[tuple[int, int]] = []
+        previous_end = 0
+        for segment in first["segments"]:
+            self.assertGreaterEqual(segment["start_byte"], previous_end)
+            self.assertGreater(segment["end_byte"], segment["start_byte"])
+            exact = raw[segment["start_byte"] : segment["end_byte"]]
+            self.assertEqual(segment["text"].encode("utf-8"), exact)
+            previous_end = segment["end_byte"]
+            selected_bytes += len(exact)
+            reason_set.update(segment["reasons"])
+            coverage.append((segment["start_byte"], segment["end_byte"]))
+        coverage.extend(
+            (item["start_byte"], item["end_byte"])
+            for item in first["omitted_ranges"]
+        )
+        cursor = 0
+        for start, end in sorted(coverage):
+            self.assertEqual(start, cursor)
+            self.assertGreater(end, start)
+            cursor = end
+        self.assertEqual(cursor, len(raw))
+        self.assertEqual(first["selected_bytes"], selected_bytes)
+        self.assertEqual(first["omitted_bytes"], len(raw) - selected_bytes)
+        self.assertTrue(
+            {"query", "error", "stack", "warning", "first", "last"}
+            <= reason_set
+        )
+
+        ordinary = references.read(self.canvas_id, stored["reference_id"])
+        self.assertIn("BOOT sequence", ordinary["chunk"])
+
+    def test_reference_search_results_preview_supports_windows_and_diversity(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        content = (
+            "C:\\src\\a.py:10:5:A-FIRST target "
+            + "a" * 120
+            + "\r\n"
+            + "C:\\src\\a.py:11:A-SECOND target "
+            + "x" * 1_500
+            + "\n"
+            + "/src/b.py:3:B-FIRST TARGET "
+            + "b" * 120
+            + "\n"
+            + "not a parseable result: target\n"
+        )
+        stored = references.put(
+            self.canvas_id,
+            summary="Search result diversity fixture",
+            content=content,
+        )
+
+        result = references.preview(
+            self.canvas_id,
+            stored["reference_id"],
+            lens="search-results-v1",
+            query="target",
+            max_output_bytes=1500,
+        )
+
+        self.assertEqual(result["status"], "preview")
+        self.assertEqual(result["lens"], {"name": "search-results", "version": 1})
+        selected = "".join(segment["text"] for segment in result["segments"])
+        self.assertIn("C:\\src\\a.py:10:5:A-FIRST target", selected)
+        self.assertIn("/src/b.py:3:B-FIRST TARGET", selected)
+        self.assertNotIn("A-SECOND", selected)
+        self.assertLessEqual(result["serialized_bytes"], 1500)
+        self.assertTrue(
+            all("query" in segment["reasons"] for segment in result["segments"])
+        )
+
+    def test_reference_preview_returns_bounded_statuses_and_validates_inputs(self) -> None:
+        references = canvas.ReferenceStore(root=self.root)
+        small = references.put(
+            self.canvas_id,
+            summary="Small preview fixture",
+            content="ERROR already fits",
+        )
+        self.assertEqual(
+            references.preview(
+                self.canvas_id,
+                small["reference_id"],
+                lens="log-v1",
+            )["status"],
+            "not_needed",
+        )
+
+        unstructured = references.put(
+            self.canvas_id,
+            summary="Unstructured preview fixture",
+            content="plain body with no recognized signal " * 80,
+        )
+        self.assertEqual(
+            references.preview(
+                self.canvas_id,
+                unstructured["reference_id"],
+                lens="log-v1",
+                max_output_bytes=1024,
+            )["status"],
+            "no_signal",
+        )
+        self.assertEqual(
+            references.preview(
+                self.canvas_id,
+                unstructured["reference_id"],
+                lens="search-results-v1",
+                query="recognized",
+                max_output_bytes=1024,
+            )["status"],
+            "unsupported_format",
+        )
+
+        parseable = references.put(
+            self.canvas_id,
+            summary="Parseable no-hit fixture",
+            content="src/file.py:7:ordinary content\n" * 80,
+        )
+        self.assertEqual(
+            references.preview(
+                self.canvas_id,
+                parseable["reference_id"],
+                lens="search-results-v1",
+                query="absent-token",
+                max_output_bytes=1024,
+            )["status"],
+            "no_signal",
+        )
+
+        oversized_signal = references.put(
+            self.canvas_id,
+            summary="Oversized signal fixture",
+            content="ERROR " + "z" * 2_000,
+        )
+        not_smaller = references.preview(
+            self.canvas_id,
+            oversized_signal["reference_id"],
+            lens="log-v1",
+            max_output_bytes=1024,
+        )
+        self.assertEqual(not_smaller["status"], "not_smaller")
+        self.assertEqual(not_smaller["segments"], [])
+
+        with self.assertRaisesRegex(canvas.CanvasError, "lens"):
+            references.preview(
+                self.canvas_id,
+                oversized_signal["reference_id"],
+                lens="unknown-v1",
+            )
+        with self.assertRaisesRegex(canvas.CanvasError, "query"):
+            references.preview(
+                self.canvas_id,
+                oversized_signal["reference_id"],
+                lens="search-results-v1",
+            )
+        with self.assertRaisesRegex(canvas.CanvasError, "budget"):
+            references.preview(
+                self.canvas_id,
+                oversized_signal["reference_id"],
+                lens="log-v1",
+                max_output_bytes=canvas.MAX_REFERENCE_PREVIEW_BYTES + 1,
+            )
 
     def test_reference_store_enforces_its_per_canvas_capacity(self) -> None:
         references = canvas.ReferenceStore(root=self.root)
@@ -422,6 +664,12 @@ class ContextCanvasTests(unittest.TestCase):
 
         with self.assertRaisesRegex(canvas.CorruptCanvasError, "unreadable"):
             references.read(self.canvas_id, stored["reference_id"])
+        with self.assertRaisesRegex(canvas.CorruptCanvasError, "unreadable"):
+            references.preview(
+                self.canvas_id,
+                stored["reference_id"],
+                lens="log-v1",
+            )
         search = references.search(self.canvas_id, "must remain")
         self.assertEqual(search["hits"], [])
         self.assertEqual(
@@ -1255,6 +1503,43 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertFalse(shown["raw_evidence_supported"])
         self.assertEqual(len(shown["canvas"]["nodes"]), 2)
 
+        reference_path = self.base / "cli-preview.log"
+        reference_path.write_text(
+            "CLI first line\r\n"
+            + "ordinary CLI noise\n" * 80
+            + "ERROR CLI exact preview marker 🙂\r\n"
+            + "CLI last line\n",
+            encoding="utf-8",
+            newline="",
+        )
+        stored_reference = run(
+            "reference-put",
+            "--canvas-id",
+            self.canvas_id,
+            "--summary",
+            "CLI explicit preview fixture",
+            "--content-file",
+            str(reference_path),
+        )
+        cli_preview = run(
+            "reference-preview",
+            "--canvas-id",
+            self.canvas_id,
+            "--reference-id",
+            stored_reference["reference_id"],
+            "--lens",
+            "log-v1",
+            "--max-output-bytes",
+            "1024",
+        )
+        self.assertEqual(cli_preview["status"], "preview")
+        self.assertTrue(
+            any(
+                "ERROR CLI exact preview" in item["text"]
+                for item in cli_preview["segments"]
+            )
+        )
+
     def test_v1_canvas_migrates_in_memory_then_persists_current_schema_on_mutation(self) -> None:
         self.initialize()
         path = self.root / self.canvas_id / "canvas.json"
@@ -1445,6 +1730,7 @@ class ContextCanvasTests(unittest.TestCase):
                 }
             )
             self.assertEqual(initialized["result"]["serverInfo"]["name"], "context-canvas-codex")
+            self.assertEqual(initialized["result"]["serverInfo"]["version"], "0.6.0")
             process.stdin.write(json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}) + "\n")
             process.stdin.flush()
 
@@ -1482,6 +1768,7 @@ class ContextCanvasTests(unittest.TestCase):
                     "reference_put",
                     "reference_read",
                     "reference_search",
+                    "reference_preview",
                     "reference_delete",
                 }
                 <= names
@@ -1580,7 +1867,17 @@ class ContextCanvasTests(unittest.TestCase):
                         "arguments": {
                             "canvas_id": self.canvas_id,
                             "summary": "MCP native reference",
-                            "content": "Native reference NEEDLE " * 128,
+                            "content": (
+                                "Native reference NEEDLE\n"
+                                + "".join(
+                                    (
+                                        ("ordinary escaped noise \\\" \\\\ line\n" * 5)
+                                        + f"ERROR item {index} \\\"quoted\\\" \\\\ path 🙂\n"
+                                        + ("ordinary escaped tail \\\" \\\\ line\n" * 5)
+                                    )
+                                    for index in range(40)
+                                )
+                            ),
                             "source": "mcp-parity-test",
                         },
                     },
@@ -1631,10 +1928,35 @@ class ContextCanvasTests(unittest.TestCase):
                 len(json.dumps(reference_search, ensure_ascii=False).encode("utf-8")),
                 1024 * 1024,
             )
-            reference_delete = request(
+            reference_preview = request(
                 {
                     "jsonrpc": "2.0",
                     "id": 13,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "reference_preview",
+                        "arguments": {
+                            "canvas_id": self.canvas_id,
+                            "reference_id": stored_reference["reference_id"],
+                            "lens": "log-v1",
+                            "max_output_bytes": 8192,
+                        },
+                    },
+                }
+            )
+            preview_result = reference_preview["result"]["structuredContent"]
+            self.assertEqual(preview_result["status"], "preview")
+            self.assertLessEqual(len(preview_result["segments"]), 24)
+            self.assertLessEqual(preview_result["serialized_bytes"], 8192)
+            self.assertNotIn("preview", preview_result)
+            self.assertLess(
+                len(json.dumps(reference_preview, ensure_ascii=False).encode("utf-8")),
+                1024 * 1024,
+            )
+            reference_delete = request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 14,
                     "method": "tools/call",
                     "params": {
                         "name": "reference_delete",
@@ -1649,7 +1971,7 @@ class ContextCanvasTests(unittest.TestCase):
             snapshot_pin = request(
                 {
                     "jsonrpc": "2.0",
-                    "id": 14,
+                    "id": 15,
                     "method": "tools/call",
                     "params": {
                         "name": "snapshot_pin",
@@ -1664,7 +1986,7 @@ class ContextCanvasTests(unittest.TestCase):
             snapshot_gc = request(
                 {
                     "jsonrpc": "2.0",
-                    "id": 15,
+                    "id": 16,
                     "method": "tools/call",
                     "params": {"name": "snapshot_gc", "arguments": {}},
                 }

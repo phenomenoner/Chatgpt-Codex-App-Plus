@@ -1,6 +1,6 @@
 # Context Canvas Codex
 
-Context Canvas Codex 0.5 keeps four deliberately separate concerns for Codex App and CLI sessions:
+Context Canvas Codex 0.6 keeps four deliberately separate concerns for Codex App and CLI sessions:
 
 - hook-derived execution identity for the current Codex session;
 - an optional, explicitly continuable session map for goals, decisions, progress, dependencies, blockers, findings, and next steps;
@@ -20,13 +20,13 @@ The adapter follows the factual-node to evidence-ref invariant from [`phenomenon
 | Non-destructive reopen | Repeating `canvas_start` never overwrites an existing ID. A rephrased goal, cwd, or title returns reviewable conflicts instead of a blocking security error. |
 | Objective versus blocker state | The durable objective is `active`, `completed`, or `abandoned`. Open problems are blocker nodes; a goal cannot be marked `blocked`. Legacy blocked goals restore as active objectives. |
 | Evidence-backed semantic nodes | Terminal factual nodes require pointer plus SHA-256 evidence. A `snapshot://sha256/<digest>` pointer is verified and durably pinned before the node commit. |
-| Explicit references | `reference_put` stores bounded policy-redacted text; content hits from `reference_search` include digest-bound UTF-8 byte ranges and a directly usable bounded `reference_read` hint; `reference_delete` removes one reference idempotently. Summary-only hits do not read the body. |
+| Explicit references | `reference_put` stores bounded policy-redacted text; content hits from `reference_search` include digest-bound UTF-8 byte ranges and a directly usable bounded `reference_read` hint; explicit `reference_preview` derives ephemeral byte-exact `log-v1` or `search-results-v1` slices; `reference_delete` removes one reference idempotently. Summary-only hits do not read the body. |
 | One-shot historical tool snapshots | Capture is off by default. `snapshot_capture_next` arms one expiring request for the next matching non-Canvas tool callback; that request is consumed once or can be cancelled. |
 | Content-addressed storage | Canonical JSON and extracted data-URL blobs are SHA-256 addressed, deterministically gzip-compressed, integrity-checked, and deduplicated. Supported textual base64 and percent-encoded data URLs, including unquoted MIME parameters, are decoded and redacted before persistence; opaque binary media is stored unchanged and explicitly labelled uninspected. |
 | Retention | Ordinary snapshots expire after 14 days by default. GC previews an exact integrity-checked plan and is non-mutating unless `--apply`; referenced or explicitly pinned objects survive ordinary TTL cleanup. |
 | Selective projection | Reference and snapshot bodies stay outside lifecycle injection and closeout. References have their own bounded search/read surface; snapshots require an explicit bounded payload read or complete CLI export. Only an intentional evidence pointer promotes a snapshot into the semantic map. |
 | Historical truth | Manifests label snapshots `historical-only`, record capture and expiry times, and require revalidation before making a current-state claim. |
-| Native tool surface | The local MCP server exposes `canvas_*`, `reference_*`, and `snapshot_*` tools. Reference reads and opted-in snapshot payload reads are bounded and chunked; complete snapshot export remains an explicit CLI operation. |
+| Native tool surface | The local MCP server exposes `canvas_*`, `reference_*`, and `snapshot_*` tools. Reference reads, explicit previews, and opted-in snapshot payload reads are bounded; complete snapshot export remains an explicit CLI operation. |
 | Concurrency | Writes use cross-process locks, atomic replacement, strict path checks, and a bootstrap lock that covers first-use directory hardening. |
 
 “Full” means the complete model-facing payload supplied to the hook after the declared sanitization policy—not a provider-private wire response that Codex never exposed. Structured and textual assignments share the same normalized secret-key classifier, including suffix-qualified names, percent/form-encoded query keys, bracket/index decoration, JSON Unicode escapes, and bounded escaped wrappers. Any assignment key containing a malformed percent escape is redacted conservatively, and supported encoded/escaped representations are scanned to a bounded fixed point even after an earlier replacement. Secret-shaped keys and strings are replaced before storage while unrelated adjacent query parameters remain usable. Supported textual data URLs are canonicalized, decoded as UTF-8, and redacted before their bytes are persisted; if any MIME parameter value contains a recognized secret, that whole value becomes the redaction sentinel so the stored media type remains valid. Export rehydrates data URLs in canonical base64 form rather than preserving the original textual encoding. A malformed or unsupported `data:` value rejects the whole observation instead of being stored as an ordinary string. Other media is preserved byte-for-byte as `opaque-uninspected`, and the manifest is labelled `sanitized-with-opaque-media`; this is not a claim that image, audio, video, or arbitrary binary content was inspected for secrets. Payloads above the configured 64 MiB hook-input ceiling are skipped rather than silently truncated, and the hook fails open so archiving cannot break the original tool call.
@@ -84,6 +84,7 @@ configuration readback alone is not runtime proof.
 ```powershell
 python -I scripts/context_canvas.py reference-put --canvas-id <opaque-id> --summary "Exploration summary" --content-file <absolute-utf8-text-file>
 python -I scripts/context_canvas.py reference-search "query" --canvas-id <opaque-id>
+python -I scripts/context_canvas.py reference-preview --canvas-id <opaque-id> --reference-id <ref-id> --lens log-v1 --query "optional exact signal" --max-output-bytes 8192
 python -I scripts/context_canvas.py reference-read --canvas-id <opaque-id> --reference-id <ref-id> --offset 0 --max-bytes 16384
 python -I scripts/context_canvas.py reference-delete --canvas-id <opaque-id> --reference-id <ref-id>
 python -I scripts/context_canvas.py snapshot-capture-next --canvas-id <opaque-id> --tool-name <exact-tool-name>
@@ -94,6 +95,8 @@ python -I scripts/context_canvas.py snapshot-pin --sha256 <payload-sha256> --rea
 python -I scripts/context_canvas.py snapshot-gc
 python -I scripts/context_canvas.py snapshot-gc --apply
 ```
+
+`reference-preview` is always an explicit read. `log-v1` selects deterministic first/last, query, error, stack/context, and warning lines; `search-results-v1` accepts strict `path:line[:column]:content` rows and preserves the first query hit per file before additional hits. Every segment is an exact UTF-8 source byte range bound to the stored digest. `not_needed`, `no_signal`, `unsupported_format`, and `not_smaller` are ordinary bounded outcomes: the tool neither invents a summary nor silently falls back to an ordinary chunk. It writes no cache, index, telemetry, or derived reference.
 
 The ordinary semantic map remains intentional:
 

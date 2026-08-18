@@ -25,7 +25,7 @@ canvas = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(canvas)
 
 SERVER_NAME = "context-canvas-codex"
-SERVER_VERSION = "0.5.0"
+SERVER_VERSION = "0.6.0"
 SUPPORTED_PROTOCOL_VERSIONS = (
     "2025-11-25",
     "2025-06-18",
@@ -248,7 +248,8 @@ TOOLS = [
         "name": "reference_search",
         "description": (
             "Search summaries and policy-redacted bodies of explicit managed references "
-            "within one Canvas, returning bounded previews only."
+            "within one Canvas. Content hits include bounded previews and digest-bound "
+            "UTF-8 byte-range read hints."
         ),
         "inputSchema": _object_schema(
             {
@@ -262,6 +263,35 @@ TOOLS = [
             },
             ["canvas_id", "query"],
             description="Search explicit managed references.",
+        ),
+    },
+    {
+        "name": "reference_preview",
+        "description": (
+            "Explicitly derive a deterministic, byte-exact, bounded preview from one "
+            "verified managed reference. The result is ephemeral, never automatic, and "
+            "does not replace an ordinary reference read."
+        ),
+        "inputSchema": _object_schema(
+            {
+                "canvas_id": {"type": "string", "pattern": "^cc-[0-9a-f]{64}$"},
+                "reference_id": {"type": "string", "pattern": "^ref-[0-9a-f]{64}$"},
+                "lens": {
+                    "type": "string",
+                    "enum": sorted(canvas.REFERENCE_PREVIEW_LENSES),
+                },
+                "query": {
+                    "type": "string",
+                    "maxLength": canvas.MAX_SEARCH_QUERY_CHARS,
+                },
+                "max_output_bytes": {
+                    "type": "integer",
+                    "minimum": canvas.MIN_REFERENCE_PREVIEW_BYTES,
+                    "maximum": canvas.MAX_REFERENCE_PREVIEW_BYTES,
+                },
+            },
+            ["canvas_id", "reference_id", "lens"],
+            description="Derive one explicit exact-slice reference preview.",
         ),
     },
     {
@@ -519,6 +549,18 @@ def _tool_reference_search(store: Any, arguments: dict[str, Any]) -> dict[str, A
     )
 
 
+def _tool_reference_preview(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    return _reference_store(store).preview(
+        arguments.get("canvas_id"),
+        arguments.get("reference_id"),
+        lens=arguments.get("lens"),
+        query=arguments.get("query"),
+        max_output_bytes=arguments.get(
+            "max_output_bytes", canvas.DEFAULT_REFERENCE_PREVIEW_BYTES
+        ),
+    )
+
+
 def _tool_reference_delete(store: Any, arguments: dict[str, Any]) -> dict[str, Any]:
     return _reference_store(store).delete(
         arguments.get("canvas_id"), arguments.get("reference_id")
@@ -605,6 +647,7 @@ TOOL_HANDLERS: dict[str, Callable[[Any, dict[str, Any]], dict[str, Any]]] = {
     "reference_put": _tool_reference_put,
     "reference_read": _tool_reference_read,
     "reference_search": _tool_reference_search,
+    "reference_preview": _tool_reference_preview,
     "reference_delete": _tool_reference_delete,
     "snapshot_capture_next": _tool_snapshot_capture_next,
     "snapshot_capture_cancel": _tool_snapshot_capture_cancel,
@@ -720,8 +763,8 @@ def _emit(message: dict[str, Any]) -> None:
             _error(message.get("id"), -32603, "response exceeds the bounded message size"),
             separators=(",", ":"),
         )
-    sys.stdout.write(encoded + "\n")
-    sys.stdout.flush()
+    sys.stdout.buffer.write(encoded.encode("utf-8") + b"\n")
+    sys.stdout.buffer.flush()
 
 
 def main() -> int:
