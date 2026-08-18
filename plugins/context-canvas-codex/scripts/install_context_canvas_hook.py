@@ -620,6 +620,7 @@ def _check_unlocked(codex_home: Path) -> dict[str, Any]:
 
 
 def check(codex_home: Path) -> dict[str, Any]:
+    codex_home = _codex_home(os.fspath(codex_home))
     _require_plain_directory(codex_home, "Codex home")
     with _installer_lock(codex_home):
         return _check_unlocked(codex_home)
@@ -707,6 +708,7 @@ def _install_unlocked(codex_home: Path) -> dict[str, Any]:
 
 
 def install(codex_home: Path) -> dict[str, Any]:
+    codex_home = _codex_home(os.fspath(codex_home))
     _ensure_plain_directory(codex_home, "Codex home")
     with _installer_lock(codex_home):
         return _install_unlocked(codex_home)
@@ -797,6 +799,7 @@ def _uninstall_unlocked(codex_home: Path) -> dict[str, Any]:
 
 
 def uninstall(codex_home: Path) -> dict[str, Any]:
+    codex_home = _codex_home(os.fspath(codex_home))
     _require_plain_directory(codex_home, "Codex home")
     with _installer_lock(codex_home):
         return _uninstall_unlocked(codex_home)

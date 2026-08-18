@@ -4,7 +4,7 @@
       "bytes": 1911,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/.codex-plugin/plugin.json",
-      "sha256": "1e2c99f8f4fcc13f61ed656db8b2510736ea75a9b26635dab50a8ec4b03eb948"
+      "sha256": "766786ec51dc92fe01fae460b806d60743a961d064d117f8a76c2e3042a8ffa7"
     },
     {
       "bytes": 226,
@@ -67,16 +67,16 @@
       "sha256": "fe6043d1100c57b8942d96d48e8cabbaed7b716693c555a01b7a85c6b28cdfec"
     },
     {
-      "bytes": 31863,
+      "bytes": 32019,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/install_context_canvas_hook.py",
-      "sha256": "d6392add2913139b574753d7883fb9bc3035982735a10557322faabac4368639"
+      "sha256": "918b7d097546528edec82fe2de16e6c05f5ec408255dab69dd1f8cc16f46722d"
     },
     {
-      "bytes": 186237,
+      "bytes": 188200,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/scripts/test_context_canvas.py",
-      "sha256": "6235e4eae5a2d6aead88c89c6f7a043c04c968597a3dd43ac3845b6976c5fe11"
+      "sha256": "575a458946042fa441e15f229688be1c743a30530c89fe6c4c9876a42eeea34f"
     },
     {
       "bytes": 9690,

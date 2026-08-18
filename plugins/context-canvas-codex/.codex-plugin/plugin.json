@@ -1,6 +1,6 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.6.0+codex.20260818144721",
+  "version": "0.6.0+codex.20260818152255",
   "description": "Optional session task maps with explicit long-context references and one-shot historical captures for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"

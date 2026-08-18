@@ -1879,6 +1879,61 @@ class ContextCanvasTests(unittest.TestCase):
         self.assertTrue(first["ok"] and second["ok"])
         self.assertFalse(first["changed"] or second["changed"])
 
+    @unittest.skipUnless(os.name == "nt", "Windows path identity behavior")
+    def test_user_hook_installer_canonicalizes_home_across_python_and_cli(self) -> None:
+        canonical_home = self.base / "MixedCaseCodexHome"
+        canonical_home.mkdir()
+        noncanonical_home = Path(os.fspath(canonical_home).swapcase())
+        self.assertEqual(
+            noncanonical_home.resolve(strict=False),
+            canonical_home.resolve(strict=False),
+        )
+        self.assertNotEqual(
+            os.fspath(noncanonical_home),
+            os.fspath(noncanonical_home.resolve(strict=False)),
+        )
+
+        installed = hook_installer.install(noncanonical_home)
+        self.assertTrue(installed["ok"])
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                "-I",
+                str(HOOK_INSTALLER_SCRIPT),
+                "check",
+                "--codex-home",
+                str(noncanonical_home),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if os.name == "nt"
+                else 0
+            ),
+        )
+        self.assertEqual(
+            completed.returncode,
+            0,
+            completed.stderr or completed.stdout,
+        )
+        self.assertTrue(json.loads(completed.stdout)["ok"])
+        self.assertTrue(hook_installer.check(canonical_home)["ok"])
+
+        removed = hook_installer.uninstall(noncanonical_home)
+        self.assertTrue(removed["ok"])
+        self.assertTrue(removed["changed"])
+        repeated = hook_installer.uninstall(canonical_home)
+        self.assertTrue(repeated["ok"])
+        self.assertFalse(repeated["changed"])
+
     def test_user_hook_installer_lock_serializes_cooperating_processes(self) -> None:
         codex_home = self.base / "locked-codex-home"
         hook_installer.install(codex_home)
