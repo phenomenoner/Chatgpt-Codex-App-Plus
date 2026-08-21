@@ -22,7 +22,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 
 - 工程技能不分叉：review、長跑監督、驗證與 incident workflows 統一指向獨立的 canonical toolkit，不再維護第二份副本。
 - Session 工作看得清楚：Context Canvas 把 hook transport identity、可選的任務地圖、明示 offload 的可回取 references，以及一次性 opt-in 歷史 snapshot 分開；缺少 Canvas 不會把原本可做的工作卡住。
-- 分工有煞車：需要 subagent 時先做成本、獨立性與寫入所有權判斷。
+- 分工有煞車：需要 subagent 時先做成本、獨立性與寫入所有權判斷，再用原生 per-spawn model／effort 路由合適的 worker。
 - 設定可重現：提供安全預設、全域 `AGENTS.md` 範例與可選安裝器。
 - 同步不洩密：只有 manifest allow-list 內的檔案能進 repo；任何憑證、私有路徑或未知檔案都會 fail closed。
 
@@ -33,7 +33,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 | `context-canvas-codex` | 可選的 session 任務導航、跨 session 明示延續、具 digest-bound range 與 deterministic preview 的文字 references，以及 default-off、一次性 opt-in 的 sanitized tool snapshots | 內含 plugin、選配 |
 | `smart-agentic-engineering-toolkit` | 16 個工程 skills，涵蓋 first-principles planning、specification、review、測試、delegation、recovery 與 release evidence | [canonical repo，版本鎖定 pointer](https://github.com/phenomenoner/smart-agentic-engineering-toolkit) |
 | `operate-a2a-superhub` | A2A Superhub 的 bounded operation 與診斷流程 | 內含、選配 |
-| `baton-fanout-skill` | Codex subagent dispatch brake、Luna/max bounded codegen route 與相對 working lane 的 review floor | [Codex 專用 branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing) |
+| `baton-fanout-skill` | 通用 dispatch brake，加上 Codex 原生 Luna/max bounded codegen／低判斷力 scout route 與相對 working lane 的 review floor | [canonical repo](https://github.com/phenomenoner/baton-fanout-skill) |
 | Understand Anything | codebase knowledge graph 與理解工具 | [上游 pointer](https://github.com/Egonex-AI/Understand-Anything) |
 | OpenAI skills | 官方與 curated skills | [上游 pointer](https://github.com/openai/skills) |
 
@@ -108,7 +108,7 @@ Codex 目前會從 user-level `.agents/skills`、repo-level `.agents/skills` 與
 
 `config/config.example.toml` 採 `workspace-write`＋`on-request`，不把個人的 full-access 設定包裝成公開 quick start。`config/AGENTS.example.md` 則把最小充分測試、review fixed point、Baton 與公開 hygiene 組成可選的全域規則範例。
 
-Codex 的 personal config、project config 與命令列 override 有明確優先序；複製設定前請先閱讀官方 [Config basics](https://learn.chatgpt.com/docs/config-file/config-basic)。
+Codex 現在支援 `[agents] default_subagent_model`、`default_subagent_reasoning_effort` 與每次 spawn 的明確 override；explicit spawn 值優先於全域 default。範例把 defaults 留在註解中，因為 Baton 依 task class 路由：穩定 codegen 與低判斷力 bounded scouts 可用 Luna/max，架構、安全與獨立 review 不應被同一個 default 誤派。詳見官方 [Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents) 與 [Config reference](https://learn.chatgpt.com/docs/config-file/config-reference)。
 
 ## 為什麼同步器是 fail closed
 
