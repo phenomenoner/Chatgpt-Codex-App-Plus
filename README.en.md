@@ -16,7 +16,7 @@ The best Codex workflows rarely live in one file. They emerge across durable ins
 
 - Keep engineering workflows canonical: review, supervision, verification, and incident skills live in one dedicated toolkit instead of a second vendored copy.
 - Navigate session work and offload context: keep hook transport identity, an optional task map, explicit retrievable references, and one-shot historical snapshots separate.
-- Delegate with brakes: require a real independence and ownership case before spawning workers.
+- Delegate with brakes: require a real independence and ownership case, then use native per-spawn model and effort routing for eligible workers.
 - Reproduce the useful parts: ship safe configuration examples and installable skills without copying runtime state.
 - Sync without leaks: export only explicit allow-listed files and fail closed on secrets, private paths, unknown files, or hash drift.
 
@@ -24,7 +24,7 @@ The best Codex workflows rarely live in one file. They emerge across durable ins
 
 The bundle includes the `context-canvas-codex` plugin and the optional `operate-a2a-superhub` skill. Context Canvas provides optional session navigation for goals, decisions, progress, dependencies, blockers, and next steps; explicit text references with digest-bound search ranges, chunk reads, and deterministic previews; and default-off, one-shot historical tool snapshots. Hook-derived IDs are transport provenance for Canvas actions, not task authority. Missing Canvas state never blocks the underlying work.
 
-Components that already have a canonical public home stay as versioned pointers instead of copied forks. General planning, specification, review, testing, delegation, recovery, and release workflows now live in the [Smart Agentic Engineering Toolkit](https://github.com/phenomenoner/smart-agentic-engineering-toolkit). Codex users are also pointed directly to the [Codex-specialized Baton branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing), while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
+Components that already have a canonical public home stay as versioned pointers instead of copied forks. General planning, specification, review, testing, delegation, recovery, and release workflows now live in the [Smart Agentic Engineering Toolkit](https://github.com/phenomenoner/smart-agentic-engineering-toolkit). The unified [Baton Fanout repository](https://github.com/phenomenoner/baton-fanout-skill) keeps its portable dispatch brake and applies GPT-specific model/effort routing only through its Codex adapter, while [Understand Anything](https://github.com/Egonex-AI/Understand-Anything) and [OpenAI skills](https://github.com/openai/skills) remain upstream pointers. See the [component catalog](catalog/components.json) for the complete inventory.
 
 The [Context Canvas technical note](docs/context-canvas-codex.md) records the Hermes comparison, Codex-specific boundaries, schema, and reproducible latency probe.
 
@@ -87,7 +87,7 @@ Then install it:
 pwsh -File scripts/install.ps1 -Skill operate-a2a-superhub
 ```
 
-Codex discovers user and repository skills from `.agents/skills` locations, while plugins can bundle skills, MCP servers, and lifecycle hooks. See OpenAI's official [Build skills](https://learn.chatgpt.com/docs/build-skills), [Package plugins](https://developers.openai.com/plugins/build/plugins), [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), and [Config basics](https://learn.chatgpt.com/docs/config-file/config-basic) guides before installing durable global behavior.
+Codex discovers user and repository skills from `.agents/skills` locations, while plugins can bundle skills, MCP servers, and lifecycle hooks. Native subagents support `[agents]` model/effort defaults and explicit per-spawn overrides; explicit spawn values take precedence. This repository leaves those defaults commented because Baton routes by task class instead of applying Luna/max to architecture, security, or independent review. See OpenAI's official [Build skills](https://learn.chatgpt.com/docs/build-skills), [Package plugins](https://developers.openai.com/plugins/build/plugins), [AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), [Subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents), and [Config reference](https://learn.chatgpt.com/docs/config-file/config-reference) guides before installing durable global behavior.
 
 ## Public-safety contract
 

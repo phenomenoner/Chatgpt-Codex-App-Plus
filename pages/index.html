@@ -1065,7 +1065,7 @@
               <div class="config-lines">
                 <div class="config-line"><code>GPT-5.6-terra / high</code><span>主 Codex agent<br>設計、監工、收斂</span></div>
                 <div class="config-line"><code>baton-fanout-skill</code><span>先判斷是否值得<br>再決定怎麼分工</span></div>
-                <div class="config-line"><code>gpt-5.6-luna / max</code><span>實際動手的 worker<br>在明確邊界內施工</span></div>
+                <div class="config-line"><code>spawn: luna / max</code><span>原生 per-spawn override<br>在明確邊界內施工</span></div>
               </div>
             </div>
             <div class="baton-checks" aria-label="Baton dispatch brake 五個問題">
@@ -1090,30 +1090,30 @@
       </div>
     </section>
 
-    <section class="slide" id="slide-6" data-label="Engineering Toolkit">
+    <section class="slide" id="slide-6" data-label="Native Routing">
       <span class="slide-number">06</span>
       <div class="slide-inner">
-        <div class="kicker">03 / Smart Agentic Engineering Toolkit</div>
-        <h2 class="section-title">當介面沒有 Luna，<br><span class="mint">就把它接成一座安全的橋。</span></h2>
+        <div class="kicker">03 / Native Subagent Routing</div>
+        <h2 class="section-title">Codex 已能原生派 Luna，<br><span class="mint">不用再繞一層 CLI bridge。</span></h2>
         <div class="luna-layout">
-          <div class="bridge-board" aria-label="Codex CLI Luna Worker 邊界示意圖">
+          <div class="bridge-board" aria-label="Codex 原生 subagent model 與 effort 路由示意圖">
             <div class="bridge-track">
               <div class="bridge-box"><span class="tiny">MAIN AGENT</span><strong>已收斂的施工 brief</strong><span>目標、驗收條件、允許路徑與禁止寫入</span></div>
               <div class="bridge-arrow">→</div>
-              <div class="bridge-box highlight"><span class="tiny">LUNA BRIDGE</span><strong>唯讀 worker</strong><span>用 Codex CLI / Luna 產生 apply_patch proposal</span></div>
+              <div class="bridge-box highlight"><span class="tiny">NATIVE SPAWN</span><strong>Luna / max worker</strong><span>model 與 effort 直接成為 subagent 參數</span></div>
               <div class="bridge-arrow">→</div>
-              <div class="bridge-box"><span class="tiny">RETURN</span><strong>主 agent 驗收</strong><span>檢查 scope、套用 patch、跑 focused tests</span></div>
+              <div class="bridge-box"><span class="tiny">RETURN</span><strong>主 agent 驗收</strong><span>重讀實際 bytes、檢查 scope、跑 focused tests</span></div>
             </div>
-            <div class="bridge-return"><b>Patch proposal 回來了</b><span>→ 還不是完成；完成要等主 agent 重新讀檔、驗證與收斂。</span></div>
+            <div class="bridge-return"><b>Worker 回來了</b><span>→ 還不是完成；完成要等主 agent 重新讀檔、驗證與收斂。</span></div>
           </div>
           <div>
-            <p class="lede" style="margin-top:0;"><code>codex-cli-luna-worker</code> 是 <a href="https://github.com/phenomenoner/smart-agentic-engineering-toolkit" target="_blank" rel="noopener">canonical toolkit</a> 裡的一個具體能力：它不是讓 Luna 越權，也不是把主 agent 的責任外包，而是在 Baton 判定值得派工後提供一條可控的動手通道。</p>
+            <p class="lede" style="margin-top:0;">Codex 的 <code>[agents]</code> defaults 是省略參數時的 fallback；真正需要依 task class 路由時，由 Baton 判斷後在原生 spawn 明確指定 <code>model</code> 與 <code>reasoning_effort</code>。穩定 codegen 與低判斷力 scout 可先用 Luna/max，高風險判斷仍留給合適的 Terra／Sol lane。</p>
             <div class="luna-steps">
-              <div class="luna-step"><div class="num">1</div><div><strong>Read-only workspace</strong><span>worker 只能提出 patch，不直接改 shared workspace，不 commit、不 push。</span></div></div>
-              <div class="luna-step"><div class="num">2</div><div><strong>Bounded target paths</strong><span>brief 明確寫出可以碰哪些檔案；超出範圍就停下來回報。</span></div></div>
+              <div class="luna-step"><div class="num">1</div><div><strong>Task class first</strong><span>先判斷 Luna/max 是否足夠；不拿便宜模型承擔架構、安全或 release judgment。</span></div></div>
+              <div class="luna-step"><div class="num">2</div><div><strong>Explicit native route</strong><span>spawn 直接帶 model／effort；每個 writer 都有 exclusive paths 與 stop conditions。</span></div></div>
               <div class="luna-step"><div class="num">3</div><div><strong>Main agent closes the loop</strong><span>主 agent 自己檢查 proposal、套用、跑測試，最後才對結果負責。</span></div></div>
             </div>
-            <div class="safety-strip"><span>proposal only</span><span>scope checked</span><span>verify centrally</span><span>no blind retry</span></div>
+            <div class="safety-strip"><span>native subagent</span><span>exclusive ownership</span><span>verify centrally</span><span>no blind retry</span></div>
           </div>
         </div>
       </div>
@@ -1175,11 +1175,11 @@
         <div>
           <div class="prompt-card">
             <div class="prompt-top"><span>INSTALL PROMPT / COPY THIS</span><button class="copy-button" id="copyPrompt" type="button">複製 prompt</button></div>
-            <pre class="prompt-text" id="installPrompt">我想依 canonical sources 安裝：1. <span class="prompt-url">https://github.com/phenomenoner/Chatgpt-Codex-App-Plus</span> 的 context-canvas-codex；2. <span class="prompt-url">https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing</span> 的 baton-fanout-skill；3. <span class="prompt-url">https://github.com/phenomenoner/smart-agentic-engineering-toolkit</span> v0.1.0。不要從舊 bundle 複製 toolkit skills。</pre>
+            <pre class="prompt-text" id="installPrompt">我想依 canonical sources 安裝：1. <span class="prompt-url">https://github.com/phenomenoner/Chatgpt-Codex-App-Plus</span> 的 context-canvas-codex；2. <span class="prompt-url">https://github.com/phenomenoner/baton-fanout-skill</span> 的 baton-fanout-skill；3. <span class="prompt-url">https://github.com/phenomenoner/smart-agentic-engineering-toolkit</span> v0.1.0。不要從舊 bundle 複製 toolkit skills。</pre>
           </div>
           <div class="cta-links">
             <a href="https://github.com/phenomenoner/Chatgpt-Codex-App-Plus" target="_blank" rel="noopener">ChatGPT Codex App Plus ↗</a>
-            <a href="https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing" target="_blank" rel="noopener">Baton Fanout Skill ↗</a>
+            <a href="https://github.com/phenomenoner/baton-fanout-skill" target="_blank" rel="noopener">Baton Fanout Skill ↗</a>
             <a href="https://github.com/phenomenoner/smart-agentic-engineering-toolkit" target="_blank" rel="noopener">Smart Agentic Engineering Toolkit ↗</a>
             <a href="https://phenomenoner.github.io/hermes-agent-harness-plus/context-canvas-story.html" target="_blank" rel="noopener">Context Canvas origin story ↗</a>
           </div>
@@ -1314,7 +1314,7 @@
         team: [
           ['先把任務形狀畫出來', 'Context Canvas 留下目標、依賴、blocker 與驗證節點；下一次回來，先看到路線再看細節。', '較少', '先畫地圖'],
           ['Baton 先踩煞車', '先問是否值得派工、工序是否獨立、每個檔案誰負責，避免「多派幾個」反而增加協調成本。', '較少', '分工前判斷'],
-          ['Luna workers 平行施工', '需要時讓 bounded worker 讀取 brief、提出 patch proposal；實作回合可以平行，但寫入所有權保持清楚。', '較少', '多條線'],
+          ['Luna workers 平行施工', '需要時以原生 model／effort override 派 bounded worker；實作回合可以平行，但寫入所有權保持清楚。', '較少', '多條線'],
           ['主 agent 收斂與驗收', 'proposal 回來後，主 agent 重新讀檔、檢查範圍、套用 patch、跑測試，最後才做完成判斷。', '可回看', '多線 → 1 個結果']
         ]
       };
@@ -1365,7 +1365,7 @@
         }, reduceMotion ? 1100 : 1700);
       });
 
-      const promptText = '我想依 canonical sources 安裝：1. https://github.com/phenomenoner/Chatgpt-Codex-App-Plus 的 context-canvas-codex；2. https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing 的 baton-fanout-skill；3. https://github.com/phenomenoner/smart-agentic-engineering-toolkit v0.1.0。不要從舊 bundle 複製 toolkit skills。';
+      const promptText = '我想依 canonical sources 安裝：1. https://github.com/phenomenoner/Chatgpt-Codex-App-Plus 的 context-canvas-codex；2. https://github.com/phenomenoner/baton-fanout-skill 的 baton-fanout-skill；3. https://github.com/phenomenoner/smart-agentic-engineering-toolkit v0.1.0。不要從舊 bundle 複製 toolkit skills。';
       const copyButton = document.getElementById('copyPrompt');
       copyButton.addEventListener('click', async () => {
         let copied = false;

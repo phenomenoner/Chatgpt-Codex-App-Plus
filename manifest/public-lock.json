@@ -159,11 +159,11 @@
   ],
   "pointers": [
     {
-      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing",
-      "commit": "69b805df9df2252119b7a87886097f8cafd5e11a",
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
+      "commit": "ed12ef2330309b93963f9a61bc5ee7de53cf0956",
       "id": "baton-fanout-skill",
       "license": "MIT",
-      "version": "codex-routing-2026-08-07"
+      "version": "1.1.0"
     },
     {
       "canonicalUrl": "https://github.com/openai/skills",

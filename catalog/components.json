@@ -40,8 +40,8 @@
       "defaultInstall": true,
       "maturity": "stable",
       "requires": [],
-      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing",
-      "summary": "Route Codex users to native collaboration tools first, apply the dispatch brake, prefer Luna/max only for eligible bounded work, and keep independent review at Sol/high or a clearly stronger exposed lane."
+      "canonicalUrl": "https://github.com/phenomenoner/baton-fanout-skill",
+      "summary": "Apply a portable dispatch brake, then use Codex-native per-spawn model and effort overrides for eligible GPT task classes; prefer Luna/max for stable bounded work and keep independent review at Sol/high or a clearly stronger exposed lane."
     },
     {
       "id": "understand-anything",
