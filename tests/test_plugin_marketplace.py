@@ -28,7 +28,7 @@ class PluginMarketplaceContractTests(unittest.TestCase):
         )
         self.assertEqual(manifest["name"], "context-canvas-codex")
         base_version, separator, build_metadata = manifest["version"].partition("+")
-        self.assertEqual(base_version, "0.6.0")
+        self.assertEqual(base_version, "0.7.0")
         self.assertEqual(separator, "+")
         self.assertRegex(
             build_metadata,
@@ -36,6 +36,39 @@ class PluginMarketplaceContractTests(unittest.TestCase):
         )
         self.assertEqual(manifest["mcpServers"], "./.mcp.json")
         self.assertLessEqual(len(manifest["interface"]["defaultPrompt"]), 3)
+
+    def test_context_canvas_reflection_skill_stays_bounded_and_advisory(self):
+        skill_root = (
+            ROOT
+            / "plugins"
+            / "context-canvas-codex"
+            / "skills"
+            / "context-canvas-reflection"
+        )
+        skill_text = (skill_root / "SKILL.md").read_text(encoding="utf-8")
+        openai_yaml = (skill_root / "agents" / "openai.yaml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("name: context-canvas-reflection", skill_text)
+        self.assertIn("CONTINUE | INVESTIGATE | ESCALATE", skill_text)
+        self.assertIn("at most one bounded", skill_text)
+        self.assertIn("at most one `reference_search`", skill_text)
+        self.assertIn("at most two bounded", skill_text)
+        self.assertIn("Do not\n   call `canvas_search`", skill_text)
+        self.assertIn("`snapshot_read`", skill_text)
+        self.assertIn("one reflection per active trigger and evidence watermark", skill_text)
+        self.assertIn("continue a Canvas solely for this skill", skill_text)
+        self.assertIn("advisory", skill_text.lower())
+        self.assertIn("The owner's response is not a fresh watermark", skill_text)
+        self.assertIn("at most three implicit reflection", skill_text)
+        self.assertIn("next_safe_action: present_to_owner", skill_text)
+        self.assertIn("[reflection-proposal]", skill_text)
+        self.assertIn("Current conversation, current owner decisions", skill_text)
+        self.assertIn("Do not automatically pause a harness", skill_text)
+        self.assertIn("must not recursively trigger", skill_text)
+        self.assertIn("$context-canvas-reflection", openai_yaml)
+        self.assertIn("allow_implicit_invocation: false", openai_yaml)
 
     def test_context_canvas_mcp_and_hook_commands_stay_inside_plugin(self):
         plugin_root = ROOT / "plugins" / "context-canvas-codex"

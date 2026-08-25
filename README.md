@@ -21,7 +21,7 @@
 Codex 很強，但真正順手的工作環境通常散落在個人設定、skills、PowerShell 工具與長期累積的操作規則裡。這個 repo 把其中可公開、可重用的部分整理成一套「Plus」層：
 
 - 工程技能不分叉：review、長跑監督、驗證與 incident workflows 統一指向獨立的 canonical toolkit，不再維護第二份副本。
-- Session 工作看得清楚：Context Canvas 把 hook transport identity、可選的任務地圖、明示 offload 的可回取 references，以及一次性 opt-in 歷史 snapshot 分開；缺少 Canvas 不會把原本可做的工作卡住。
+- Session 工作看得清楚：Context Canvas 把 hook transport identity、可選的任務地圖、明示 offload 的可回取 references，以及一次性 opt-in 歷史 snapshot 分開；另附只在 meaningful checkpoint 觸發的 evidence-first reflection skill。缺少 Canvas 不會把原本可做的工作卡住。
 - 分工有煞車：需要 subagent 時先做成本、獨立性與寫入所有權判斷。
 - 設定可重現：提供安全預設、全域 `AGENTS.md` 範例與可選安裝器。
 - 同步不洩密：只有 manifest allow-list 內的檔案能進 repo；任何憑證、私有路徑或未知檔案都會 fail closed。
@@ -30,7 +30,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 
 | Component | 解決什麼問題 | 發佈方式 |
 |---|---|---|
-| `context-canvas-codex` | 可選的 session 任務導航、跨 session 明示延續、具 digest-bound range 與 deterministic preview 的文字 references，以及 default-off、一次性 opt-in 的 sanitized tool snapshots | 內含 plugin、選配 |
+| `context-canvas-codex` | 可選的 session 任務導航、跨 session 明示延續、具 digest-bound range 與 deterministic preview 的文字 references、default-off 一次性 snapshots，以及 advisory bounded reflection | 內含 plugin、選配 |
 | `smart-agentic-engineering-toolkit` | 16 個工程 skills，涵蓋 first-principles planning、specification、review、測試、delegation、recovery 與 release evidence | [canonical repo，版本鎖定 pointer](https://github.com/phenomenoner/smart-agentic-engineering-toolkit) |
 | `operate-a2a-superhub` | A2A Superhub 的 bounded operation 與診斷流程 | 內含、選配 |
 | `baton-fanout-skill` | Codex subagent dispatch brake、Luna/max bounded codegen route 與相對 working lane 的 review floor | [Codex 專用 branch](https://github.com/phenomenoner/baton-fanout-skill/tree/codex/add-model-effort-routing) |
@@ -60,7 +60,7 @@ codex plugin list
 安裝 Context Canvas plugin：
 
 ```powershell
-codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref context-canvas-codex-v0.6.0
+codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref context-canvas-codex-v0.7.0
 codex plugin add context-canvas-codex@codex-app-plus
 codex plugin list
 ```
@@ -124,7 +124,9 @@ Codex 的 personal config、project config 與命令列 override 有明確優先
 
 ## Context Canvas 的分層
 
-0.6 把四件事拆開：hook-derived opaque ID 只是 Canvas transport provenance；session map 提供目標、決策、進度、依賴、阻塞與下一步導航；大型文字結果用 `reference_put/search/preview/read/delete` 明示 offload 與有界回取；歷史 tool payload 只有先呼叫 `snapshot_capture_next` 才保存下一個匹配 callback。Canvas 不是 source of truth、授權系統、WAL、release gate 或 workflow engine，缺少 identity、map 或 lineage 不會阻塞工作。`canvas_start` 只在導航有具體價值時建立；同 ID 的文字差異只回報 conflict、不覆寫，跨 session 延續仍用 `canvas_continue` 明示前身以保留 v3 相容性。
+0.7 延續 0.6 的四層 Canvas core，並加上一個獨立的 `context-canvas-reflection` v0 preview skill。它只在 repeated same-cause、關鍵假設被推翻、local green 但 real use 失敗、scope 漂移、material phase boundary 或尚未取得 owner approval 的 authority-sensitive 下一步等 meaningful checkpoint 進行一次 reflection；先重驗 current evidence，再輸出一個 bounded `CONTINUE`、`INVESTIGATE` 或 `ESCALATE` disposition。第一次普通失敗、健康前進、固定時間間隔或只是有／沒有 Canvas 都不構成 trigger。它是 advisory companion，不是 controller，也不擁有 replan、rollback、pause、publication 或 external effect。Public plugin 預設關閉 implicit invocation；使用者可用 `$context-canvas-reflection` 明示呼叫，或在自己控制的 `AGENTS.md` 加入 bounded trigger policy 來 opt in。
+
+Canvas core 仍把四件事拆開：hook-derived opaque ID 只是 Canvas transport provenance；session map 提供目標、決策、進度、依賴、阻塞與下一步導航；大型文字結果用 `reference_put/search/preview/read/delete` 明示 offload 與有界回取；歷史 tool payload 只有先呼叫 `snapshot_capture_next` 才保存下一個匹配 callback。Canvas 不是 source of truth、授權系統、WAL、release gate 或 workflow engine，缺少 identity、map 或 lineage 不會阻塞工作。`canvas_start` 只在導航有具體價值時建立；同 ID 的文字差異只回報 conflict、不覆寫，跨 session 延續仍用 `canvas_continue` 明示前身以保留 v3 相容性。
 
 明示 reference 會先套用文字 redaction，再以 bounded UTF-8 chunks 原生回取。內容搜尋結果帶有 source digest、精確 UTF-8 byte range 與可直接使用的 read hint；`reference_preview` 則用 `log-v1` 或嚴格 line-oriented `search-results-v1` 產生 ephemeral exact slices。Preview 不會自動執行、不改寫 stored body、不建立衍生 cache，也不以 lossy summary 冒充原文；無法形成更小的安全預覽時會回傳明確 bounded status。Reference 是歷史資料，若要做 current-state claim 仍需重查 live source。Snapshot capture 預設關閉；armed request 有 expiry、只消耗一次、精確 tool mismatch 不會消耗，Canvas 自己的工具也會被忽略。前版留下且其他欄位完全 canonical 的 wildcard request 只允許 cancel、exact replace 或 expiry retirement，永不匹配 callback；其他 malformed state 保留並 fail closed。匹配時保存 hook 收到的完整 model-facing payload（依宣告 policy sanitization，超過上限則整筆跳過而不截斷），並以 SHA-256＋deterministic gzip 做 dedupe。Sanitizer 與既有 TTL、pin、transitive blob 驗證及 GC 相容行為保留。`snapshot_list` 回傳 manifest；`snapshot_read(include_payload=true)` 可明示讀取 bounded chunks，完整本機檔案 export 仍走 CLI。
 

@@ -1,6 +1,6 @@
 # Context Canvas Codex
 
-Context Canvas Codex 0.6 keeps four deliberately separate concerns for Codex App and CLI sessions:
+Context Canvas Codex 0.7 keeps the 0.6 Canvas core intact and adds an optional bounded reflection companion for Codex App and CLI sessions. The core still separates four concerns:
 
 - hook-derived execution identity for the current Codex session;
 - an optional, explicitly continuable session map for goals, decisions, progress, dependencies, blockers, findings, and next steps;
@@ -8,6 +8,8 @@ Context Canvas Codex 0.6 keeps four deliberately separate concerns for Codex App
 - a default-off historical snapshot store for the next explicitly requested Codex `PostToolUse` callback.
 
 The split follows one rule: **map selectively, offload explicitly, retrieve narrowly, revalidate when freshness matters**. Canvas is a reference layer, not task authority, a source of truth, an authorization system, a WAL, a release gate, or a workflow engine. Missing Canvas state never blocks the underlying work.
+
+The bundled `context-canvas-reflection` v0 preview skill is a proposal-only checkpoint procedure. It triggers only when trajectory evidence materially changes—for example, a repeated same-cause failure after one bounded attempt, a contradicted critical assumption, local checks that disagree with real use, scope drift, a materially unresolved phase boundary, an authority-sensitive next effect that lacks current owner approval, or explicit user doubt. It revalidates current evidence and returns exactly one bounded `CONTINUE`, `INVESTIGATE`, or `ESCALATE` disposition. A first ordinary failure, healthy progress, fixed cadence, or Canvas availability alone is not a trigger. The main agent, harness, or user retains every planning and effect decision. Implicit invocation is disabled by default; call `$context-canvas-reflection` explicitly or opt in through a bounded host policy such as a user-controlled `AGENTS.md` rule.
 
 The adapter follows the factual-node to evidence-ref invariant from [`phenomenoner/hermes-agent-harness-plus`](https://github.com/phenomenoner/hermes-agent-harness-plus) at comparison commit `7d6beb485d658a0342194c0e42edcdb7106ed1cb`. It is a clean Codex adaptation; no upstream source code was copied.
 

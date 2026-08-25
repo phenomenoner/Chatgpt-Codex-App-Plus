@@ -1,0 +1,7 @@
+interface:
+  display_name: "Context Canvas Reflection"
+  short_description: "Run bounded trajectory reflection from current evidence"
+  default_prompt: "Use $context-canvas-reflection to reassess this task at a meaningful checkpoint and propose one bounded next disposition."
+
+policy:
+  allow_implicit_invocation: false

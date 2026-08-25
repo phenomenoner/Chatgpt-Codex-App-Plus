@@ -11,7 +11,7 @@
         "Codex SessionStart, UserPromptSubmit, and PostToolUse through native plugin hooks or the explicit user-hook adapter",
         "Python 3.11+ available as python"
       ],
-      "summary": "Provide an optional session task map, explicit text references with digest-bound search ranges, bounded chunk reads, deterministic exact-slice previews, and default-off one-shot historical tool snapshots. Hook identity is transport provenance only; missing Canvas state never blocks the underlying task."
+      "summary": "Provide an optional session task map, explicit text references with digest-bound search ranges, bounded chunk reads, deterministic exact-slice previews, default-off one-shot historical tool snapshots, and an opt-in v0 evidence-first reflection preview for meaningful trajectory checkpoints. Reflection proposes one bounded disposition but never becomes a controller or authority; missing Canvas state never blocks the underlying task."
     },
     {
       "id": "smart-agentic-engineering-toolkit",

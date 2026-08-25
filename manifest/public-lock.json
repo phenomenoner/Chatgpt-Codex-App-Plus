@@ -1,10 +1,10 @@
 {
   "files": [
     {
-      "bytes": 1911,
+      "bytes": 2284,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/.codex-plugin/plugin.json",
-      "sha256": "dac14f69f9a4705caefa32943414cc3461d60c224f8579a2c6a0c437c6088a99"
+      "sha256": "b05bb77963d9a1ed5aa89dfe71c805dbab62e5d14273c7903de32c2aceb3e817"
     },
     {
       "bytes": 226,
@@ -25,10 +25,10 @@
       "sha256": "14fc5530a71e04722a9e72a9177723fe0443eb3f639f60d36d87cd4a2d4e8ab3"
     },
     {
-      "bytes": 18441,
+      "bytes": 19453,
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/README.md",
-      "sha256": "fe990a2dadda31c79ca648cc2e619db8ef4e09aa83317c2702b4906d69b86153"
+      "sha256": "68348c9024140b47995f4304da4a1b9707550913a9cc42492ec64e7fe97da560"
     },
     {
       "bytes": 12044,
@@ -89,6 +89,18 @@
       "componentId": "context-canvas-codex",
       "path": "plugins/context-canvas-codex/skills/context-canvas-checkpoint/agents/openai.yaml",
       "sha256": "c75e377c3eea62296bd942c1ed0b67e6e59bfddf642240a42ca621764f336647"
+    },
+    {
+      "bytes": 11095,
+      "componentId": "context-canvas-codex",
+      "path": "plugins/context-canvas-codex/skills/context-canvas-reflection/SKILL.md",
+      "sha256": "7adbcab7ccd3442fa9d59be0c08c20080a914e74323c77a40048acab7f387c6b"
+    },
+    {
+      "bytes": 320,
+      "componentId": "context-canvas-codex",
+      "path": "plugins/context-canvas-codex/skills/context-canvas-reflection/agents/openai.yaml",
+      "sha256": "748ae0dba8400db84b064bbaf25bb4c8a010d7803c4a2b36d62e211169f0074f"
     },
     {
       "bytes": 7244,

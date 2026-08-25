@@ -1,7 +1,7 @@
 {
   "name": "context-canvas-codex",
-  "version": "0.6.0+codex.20260818075059",
-  "description": "Optional session task maps with explicit long-context references and one-shot historical captures for Codex App and CLI.",
+  "version": "0.7.0+codex.20260825200846",
+  "description": "Optional session task maps, explicit context offload, one-shot captures, and an opt-in evidence-first reflection preview for Codex App and CLI.",
   "author": {
     "name": "phenomenoner"
   },
@@ -12,6 +12,7 @@
     "context-management",
     "task-map",
     "evidence",
+    "reflection",
     "snapshot",
     "cache",
     "windows"
@@ -20,8 +21,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Context Canvas Codex",
-    "shortDescription": "Navigate session work and offload retrievable context.",
-    "longDescription": "Adds an optional session map for goals, decisions, progress, dependencies, blockers, and next steps. Large textual results can be offloaded into explicit, bounded, searchable references, retrieved in chunks, or viewed through explicit deterministic exact-slice lenses for logs and line-oriented search results. Derived previews are ephemeral and never replace the stored body. A separate PostToolUse history capture is off by default and stores only the next explicitly requested callback. Trusted hook IDs provide transport provenance for Canvas actions; missing Canvas state never blocks the underlying task and Canvas is not an authority, workflow engine, WAL, or source of truth.",
+    "shortDescription": "Navigate, offload context, and reflect at meaningful checkpoints.",
+    "longDescription": "Adds an optional session map for goals, decisions, progress, dependencies, blockers, and next steps. Large textual results can be offloaded into explicit, bounded, searchable references, retrieved in chunks, or viewed through explicit deterministic exact-slice lenses for logs and line-oriented search results. Derived previews are ephemeral and never replace the stored body. A separate PostToolUse history capture is off by default and stores only the next explicitly requested callback. An opt-in v0 reflection preview revalidates current evidence at meaningful trajectory checkpoints and recommends one bounded CONTINUE, INVESTIGATE, or ESCALATE disposition; implicit discovery is disabled by default, and the skill never becomes a controller or authority. Trusted hook IDs provide transport provenance for Canvas actions; missing Canvas state never blocks the underlying task and Canvas is not an authority, workflow engine, WAL, or source of truth.",
     "developerName": "phenomenoner",
     "category": "Productivity",
     "capabilities": [
@@ -30,7 +31,7 @@
     ],
     "defaultPrompt": [
       "Create or restore an optional task map when navigation or offload would add value.",
-      "List my recent task canvases and continue the relevant lineage here.",
+      "List my recent task canvases, continue the relevant lineage, or run one bounded reflection at a meaningful checkpoint.",
       "Store, search, preview, or retrieve explicit references and opted-in historical tool snapshots for this task."
     ]
   }

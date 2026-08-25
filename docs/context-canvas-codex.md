@@ -1,7 +1,8 @@
 # Context Canvas for Codex App and CLI
 
 `context-canvas-codex` is an optional session-navigation and long-context
-offload layer. It keeps four concerns separate:
+offload layer with a separately bounded reflection companion. Its Canvas core
+keeps four concerns separate:
 
 1. a hook-derived opaque binding for the current Codex session;
 2. a bounded task map for goals, decisions, progress, dependencies, blockers,
@@ -13,6 +14,21 @@ The product rule is: **map selectively, offload explicitly, retrieve narrowly,
 revalidate when freshness matters**. Canvas is not a source of truth,
 authorization system, WAL, release gate, or workflow engine. Missing identity,
 map state, lineage, or synchronization never blocks otherwise authorized work.
+
+Version 0.7 adds `context-canvas-reflection` v0 as an advisory preview skill, not as a
+fifth Canvas persistence concern. At a meaningful trajectory checkpoint it
+revalidates current evidence, optionally reads one active Canvas plus at most
+two directly relevant managed-reference chunks, and returns one bounded
+`CONTINUE`, `INVESTIGATE`, or `ESCALATE` disposition. Its triggers include a
+repeated same-cause failure after one bounded attempt, a contradicted critical
+assumption, local checks that disagree with real use, material scope drift or
+phase-boundary uncertainty, an authority-sensitive next effect, and explicit
+user doubt. First ordinary failures, healthy progress, fixed cadence, task
+size, and Canvas presence or absence are non-triggers. The skill never owns a
+replan, rollback, pause, publication, external effect, or Canvas lifecycle.
+Implicit invocation is disabled in the public plugin by default. Call the skill
+explicitly or opt in through a bounded trigger policy in a user-controlled
+`AGENTS.md`.
 
 The design was compared with
 [`phenomenoner/hermes-agent-harness-plus`](https://github.com/phenomenoner/hermes-agent-harness-plus)
@@ -195,7 +211,7 @@ as the CLI invocation.
 ## Install and prove only the surface you use
 
 ```powershell
-codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref context-canvas-codex-v0.6.0
+codex plugin marketplace add phenomenoner/Chatgpt-Codex-App-Plus --ref context-canvas-codex-v0.7.0
 codex plugin add context-canvas-codex@codex-app-plus
 codex plugin list
 ```
