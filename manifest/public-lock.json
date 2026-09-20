@@ -186,10 +186,10 @@
     },
     {
       "canonicalUrl": "https://github.com/phenomenoner/smart-agentic-engineering-toolkit",
-      "commit": "425dcbe248b7fbb0fc536eae145ccea23dc5a1e3",
+      "commit": "e64c60f946fb42289ffaabecd59660a4940c0826",
       "id": "smart-agentic-engineering-toolkit",
       "license": "MIT",
-      "version": "0.1.0"
+      "version": "0.5.0+main.e64c60f"
     },
     {
       "canonicalUrl": "https://github.com/Egonex-AI/Understand-Anything",

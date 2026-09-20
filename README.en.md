@@ -36,10 +36,10 @@ Set-Location Chatgpt-Codex-App-Plus
 python scripts/public_sync.py validate
 ```
 
-Install the canonical Smart Agentic Engineering Toolkit:
+Install the canonical Smart Agentic Engineering Toolkit. This pinned commit includes acceptance-report updates after v0.5.0; it is not a new release tag. Reports distinguish synthetic tests, recorded replay, and actual dispatch, and identify remaining budget approvals and human-only actions:
 
 ```powershell
-codex plugin marketplace add phenomenoner/smart-agentic-engineering-toolkit --ref v0.1.0
+codex plugin marketplace add phenomenoner/smart-agentic-engineering-toolkit --ref e64c60f946fb42289ffaabecd59660a4940c0826
 codex plugin add smart-agentic-engineering-toolkit@smart-agentic-engineering-toolkit
 codex plugin list
 ```

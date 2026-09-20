@@ -22,7 +22,7 @@
         "Codex plugin support or a compatible Agent Skills host"
       ],
       "canonicalUrl": "https://github.com/phenomenoner/smart-agentic-engineering-toolkit",
-      "summary": "Canonical 16-skill engineering suite for evidence-calibrated planning, implementation, review, testing, delegation, recovery, and release work, with first-principles mechanism checks at planning boundaries."
+      "summary": "Canonical engineering skills for specification, implementation, review and acceptance. Reports distinguish synthetic tests, recorded replay and actual dispatch, with explicit budget approval and human-assistance gaps."
     },
     {
       "id": "operate-a2a-superhub",

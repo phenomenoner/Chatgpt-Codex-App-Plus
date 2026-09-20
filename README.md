@@ -31,7 +31,7 @@ Codex 很強，但真正順手的工作環境通常散落在個人設定、skill
 | Component | 解決什麼問題 | 發佈方式 |
 |---|---|---|
 | `context-canvas-codex` | 可選的 session 任務導航、跨 session 明示延續、具 digest-bound range 與 deterministic preview 的文字 references、default-off 一次性 snapshots，以及 advisory bounded reflection | 內含 plugin、選配 |
-| `smart-agentic-engineering-toolkit` | 16 個工程 skills，涵蓋 first-principles planning、specification、review、測試、delegation、recovery 與 release evidence | [canonical repo，版本鎖定 pointer](https://github.com/phenomenoner/smart-agentic-engineering-toolkit) |
+| `smart-agentic-engineering-toolkit` | 工程 skills，涵蓋規格、實作、審查與驗收；區分模擬、真實事件回放及真實派工證據 | [canonical repo，版本鎖定 pointer](https://github.com/phenomenoner/smart-agentic-engineering-toolkit) |
 | `operate-a2a-superhub` | A2A Superhub 的 bounded operation 與診斷流程 | 內含、選配 |
 | `baton-fanout-skill` | 通用 dispatch brake，加上 Codex 原生 Luna/max bounded codegen／低判斷力 scout route 與相對 working lane 的 review floor | [canonical repo](https://github.com/phenomenoner/baton-fanout-skill) |
 | Understand Anything | codebase knowledge graph 與理解工具 | [上游 pointer](https://github.com/Egonex-AI/Understand-Anything) |
@@ -49,10 +49,10 @@ Set-Location Chatgpt-Codex-App-Plus
 python scripts/public_sync.py validate
 ```
 
-安裝 canonical Smart Agentic Engineering Toolkit：
+安裝 canonical Smart Agentic Engineering Toolkit：下列固定 commit 包含 v0.5.0 之後的驗收回報更新，並非新的版本標籤。未完成真實派工時，會分別說明自動測試預算與必要的人工操作。
 
 ```powershell
-codex plugin marketplace add phenomenoner/smart-agentic-engineering-toolkit --ref v0.1.0
+codex plugin marketplace add phenomenoner/smart-agentic-engineering-toolkit --ref e64c60f946fb42289ffaabecd59660a4940c0826
 codex plugin add smart-agentic-engineering-toolkit@smart-agentic-engineering-toolkit
 codex plugin list
 ```
