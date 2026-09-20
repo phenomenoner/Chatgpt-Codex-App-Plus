@@ -33,6 +33,8 @@
 ## Subagent dispatch
 
 - Before creating a subagent, use `baton-fanout-skill` when installed. Dispatch only when the outcome, direct-work alternative, genuine independence, exclusive write ownership, stop conditions, and main-agent verification owner are clear.
+- When Codex exposes native per-spawn routing, use `model: "gpt-5.6-luna"` and `reasoning_effort: "max"` for stable, bounded, cheaply falsifiable work whose judgment need is no greater than Terra/high, especially exact-target code generation and low-judgment scouts. Keep architecture, security, authorization, release judgment, and independent review on an appropriate stronger lane.
+- Treat `[agents]` model and effort defaults as omission fallbacks, not task classifiers. Prefer a self-contained or bounded recent-turn fork when applying explicit overrides; if the live schema makes full-history forks inherit the parent route, do not claim that a conflicting override was applied. Do not start a nested Codex CLI worker merely to obtain a native route.
 - Do not parallelize overlapping writes or unresolved shared contracts. Treat failed or unavailable workers as visible coverage gaps.
 
 ## Long-running commands
