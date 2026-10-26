@@ -4,8 +4,8 @@
     {
       "id": "context-canvas-codex",
       "mode": "vendor",
-      "sourceRoot": "plugins",
-      "source": "context-canvas-codex",
+      "sourceRoot": "repository",
+      "source": "plugins/context-canvas-codex",
       "destination": "plugins/context-canvas-codex",
       "include": [
         "*",

@@ -187,6 +187,94 @@ class PublicSyncTests(unittest.TestCase):
         payload = json.loads(validated.stdout)
         self.assertTrue(any("Untracked vendor files" in error for error in payload["errors"]))
 
+    def _write_repository_plugin_manifest(self, source="plugins/sample-plugin"):
+        plugin = self.repo / "plugins" / "sample-plugin"
+        (plugin / ".codex-plugin").mkdir(parents=True)
+        (plugin / ".codex-plugin" / "plugin.json").write_text(
+            json.dumps({"name": "sample-plugin", "version": "0.7.0"}) + "\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        self.manifest.write_text(
+            json.dumps(
+                {
+                    "schemaVersion": "codex-plus-public-sources.v1",
+                    "components": [
+                        {
+                            "id": "sample-plugin",
+                            "mode": "vendor",
+                            "sourceRoot": "repository",
+                            "source": source,
+                            "destination": "plugins/sample-plugin",
+                            "include": ["*", "**/*"],
+                            "exclude": [],
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return plugin
+
+    def test_repository_source_preserves_maintained_plugin_over_older_local_copy(self):
+        plugin = self._write_repository_plugin_manifest()
+        (plugin / "reflection.md").write_text(
+            "Current safeguards.\n", encoding="utf-8", newline="\n"
+        )
+        legacy = self.plugins / "sample-plugin" / ".codex-plugin"
+        legacy.mkdir(parents=True)
+        (legacy / "plugin.json").write_text(
+            json.dumps({"name": "sample-plugin", "version": "0.4.0"}),
+            encoding="utf-8",
+        )
+        before = {
+            path.relative_to(plugin): path.read_bytes()
+            for path in plugin.rglob("*") if path.is_file()
+        }
+
+        applied = self._run("sync", "--apply")
+
+        self.assertEqual(applied.returncode, 0, applied.stderr or applied.stdout)
+        after = {
+            path.relative_to(plugin): path.read_bytes()
+            for path in plugin.rglob("*") if path.is_file()
+        }
+        self.assertEqual(before, after)
+        validated = self._run("validate")
+        self.assertEqual(validated.returncode, 0, validated.stderr or validated.stdout)
+        repeated = self._run("sync")
+        self.assertEqual(repeated.returncode, 0, repeated.stderr or repeated.stdout)
+        self.assertTrue(json.loads(repeated.stdout)["inSync"])
+
+    def test_repository_source_path_escape_is_rejected(self):
+        self._write_repository_plugin_manifest(source="../outside")
+
+        result = self._run("sync", "--apply")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertTrue(
+            any("escapes" in error for error in json.loads(result.stdout)["errors"])
+        )
+        self.assertFalse((self.repo / "manifest" / "public-lock.json").exists())
+
+    def test_repository_source_credentials_cannot_rewrite_lock(self):
+        plugin = self._write_repository_plugin_manifest()
+        applied = self._run("sync", "--apply")
+        self.assertEqual(applied.returncode, 0, applied.stderr or applied.stdout)
+        lock = self.repo / "manifest" / "public-lock.json"
+        before = lock.read_bytes()
+        (plugin / "unsafe.md").write_text(
+            "access_token = " + "gho_" + "a" * 36, encoding="utf-8"
+        )
+
+        result = self._run("sync", "--apply")
+
+        self.assertEqual(result.returncode, 2)
+        self.assertTrue(
+            any("token" in error.lower() for error in json.loads(result.stdout)["errors"])
+        )
+        self.assertEqual(lock.read_bytes(), before)
+
 
 if __name__ == "__main__":
     unittest.main()

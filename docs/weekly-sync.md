@@ -2,6 +2,12 @@
 
 The weekly task runs against the local repository and may update only sources already authorized in `manifest/public-sources.json`.
 
+Context Canvas is maintained in this repository. Its manifest entry uses
+`sourceRoot: repository` and the existing `plugins/context-canvas-codex` directory.
+Synchronization scans and locks those files without reimporting an external
+installed copy. This source mapping does not change any upstream pointer or
+permit additional components.
+
 ## Required sequence
 
 1. Run `python scripts/public_sync.py sync --apply`.

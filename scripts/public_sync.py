@@ -192,8 +192,12 @@ def _validate_manifest(manifest: Any) -> list[str]:
             ids.add(component_id)
         mode = component.get("mode")
         if mode == "vendor":
-            if component.get("sourceRoot") not in {"codex", "agents", "plugins"}:
-                errors.append(f"{prefix}.sourceRoot must be codex, agents, or plugins.")
+            if component.get("sourceRoot") not in {
+                "codex", "agents", "plugins", "repository"
+            }:
+                errors.append(
+                    f"{prefix}.sourceRoot must be codex, agents, plugins, or repository."
+                )
             for field in ("source", "destination"):
                 if not isinstance(component.get(field), str) or not component[field]:
                     errors.append(f"{prefix}.{field} must be a non-empty string.")
@@ -547,6 +551,7 @@ def _sync_command(args: argparse.Namespace) -> int:
         "codex": Path(args.codex_home).resolve(),
         "agents": Path(args.agents_home).resolve(),
         "plugins": Path(args.plugins_home).resolve(),
+        "repository": repository_root,
     }
     desired, pointers, errors = _collect_desired(
         manifest, repository_root, source_roots

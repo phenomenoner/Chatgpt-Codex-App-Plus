@@ -32,6 +32,13 @@ Pointers are bound to a full commit in `manifest/public-sources.json` and copied
 
 ## Export invariant
 
+Components maintained in this repository use `sourceRoot: repository`, with an
+explicit source path relative to the selected checkout. Context Canvas uses its
+existing `plugins/context-canvas-codex` directory as both source and destination:
+sync validates and locks those maintained files instead of importing an older
+external installation. Other approved components retain their declared source
+roots. Changing a component's source root still requires interactive review.
+
 The exporter computes the desired public tree from the manifest, not from directory discovery. Unlisted files remain local. Listed text is normalized, scanned, and hashed before any destination write. Source or destination path escape, symlinks, binary input, credential patterns, private paths, and backup/runtime file types fail closed.
 
 An exception is possible only for a non-secret finding named in the exporter's fixed set, on an exact component-relative file, with a public reason in the manifest. Credential findings are not exemptible.
